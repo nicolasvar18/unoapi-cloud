@@ -70,9 +70,8 @@ export const getClientBaileys: getClient = async ({
     }
     if (config.autoConnect) {
       logger.info('Connecting client %s', phone)
-      if (await client.connect(1)) {
-        clients.set(phone, client)
-      }
+      await client.connect(1)
+      clients.set(phone, client)
       logger.info('Created and connected client %s', phone)
     } else {
       logger.info('Config client to not auto connect %s', phone)
@@ -263,17 +262,19 @@ export class ClientBaileys implements Client {
     const { sessionStore } = this.store
 
     await sessionStore.syncConnection(this.phone)
-    if (await sessionStore.isStatusConnecting(this.phone)) {
-      logger.warn('Already Connecting %s', this.phone)
-      return
-    }
-    if (await sessionStore.isStatusOnline(this.phone)) {
-      logger.warn('Already Connected %s', this.phone)
-      return
-    }
-    if (await sessionStore.isStatusStandBy(this.phone)) {
-      logger.warn('Standby %s', this.phone)
-      return
+    if (this.sendMessage !== this.sendMessageDefault) {
+      if (await sessionStore.isStatusConnecting(this.phone)) {
+        logger.warn('Already Connecting %s', this.phone)
+        return true
+      }
+      if (await sessionStore.isStatusOnline(this.phone)) {
+        logger.warn('Already Connected %s', this.phone)
+        return true
+      }
+      if (await sessionStore.isStatusStandBy(this.phone)) {
+        logger.warn('Standby %s', this.phone)
+        return true
+      }
     }
 
     const result = await connect({
