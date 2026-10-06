@@ -48,41 +48,153 @@ graph TD
 
 Todas las credenciales principales del sistema se configuran en el archivo `.env` en la raíz del proyecto.
 
-### Resumen de Credenciales y URLs Locales
+### Resumen de Credenciales y Puertos de Producción / Local
 
-| Servicio | URL / Host | Usuario / Identificador | Contraseña / Token |
-| :--- | :--- | :--- | :--- |
-| **Panel Web Unoapi** | `http://localhost:9876` | Token de Acceso | `jsdoijohiewr948hwodjqsjdjldasdlk` |
-| **API REST WhatsApp** | `http://localhost:9876/v15.0/...` | `Bearer Token` | `jsdoijohiewr948hwodjqsjdjldasdlk` |
-| **MinIO Console (S3)** | `http://localhost:9001` | `my-minio` | `2NVQWHTTT3asdasMgqapGchy6yAMZn` |
-| **MinIO API (S3)** | `http://localhost:9000` | `my-minio` | `2NVQWHTTT3asdasMgqapGchy6yAMZn` |
-| **RabbitMQ Manager** | `http://localhost:15672` | `guest` | `guest` |
-| **Redis Database** | `localhost:6379` | *(Sin contraseña por defecto)* | *(Ninguna)* |
-| **RedisInsight UI** | `http://localhost:5540` | Host: `redis`, Port: `6379` | *(Sin contraseña)* |
+| Servicio | URL / Host | Usuario / Identificador | Contraseña / Token | Notas de Seguridad |
+| :--- | :--- | :--- | :--- | :--- |
+| **Panel Web Unoapi** | `https://wapp-services.appoio.site` | Token de Acceso | `jsdoijohiewr948hwodjqsjdjldasdlk` | En cabecera `Authorization: Bearer <token>` |
+| **MinIO Console (S3)** | `http://134.209.115.23:9001` | `admin_s3_unoapi` | `Upi83xv1nADEn5SgBBfsqZMtWBvV6e1o` | Panel web de gestión S3 |
+| **MinIO API (S3)** | `http://134.209.115.23:9000` | `admin_s3_unoapi` | `Upi83xv1nADEn5SgBBfsqZMtWBvV6e1o` | Endpoint S3 para uploads/downloads |
+| **RabbitMQ Manager** | `http://134.209.115.23:15672` | `admin_rabbit_unoapi` | `TGxLJn4LHFgvEtstPZYumufza6K7l0DQ` | Usuario `guest` eliminado por seguridad |
+| **Redis Database** | `127.0.0.1:6379` | `default` | `hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK` | Protegido con `requirepass` y enlace a localhost |
+| **RedisInsight UI** | `http://134.209.115.23:5540` | Host: `redis`, Port: `6379` | `hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK` | Panel web para inspeccionar llaves Redis |
 
-### ¿Dónde y cómo cambiar estas credenciales?
+### ¿Dónde y cómo cambiar o rotar estas credenciales?
 
-Abre el archivo [`.env`](file:///.env) en el editor:
+Todas las variables se encuentran en el archivo [`.env`](file:///.env) y se transmiten a través de `docker-compose.yml`:
 
 1. **Token Maestro de la API (`UNOAPI_AUTH_TOKEN`):**
    ```bash
-   UNOAPI_AUTH_TOKEN=tu_nuevo_token_secreto_super_seguro_12345
+   UNOAPI_AUTH_TOKEN=tu_nuevo_token_secreto_super_seguro
    ```
-   * *Uso:* Es el token que debes ingresar en el login de la página web y en la cabecera `Authorization: Bearer <token>` de tus peticiones HTTP.
-   * *Importante:* Cada sesión puede tener adicionalmente su propio token secundario si deseas aislar números para clientes distintos.
-
-2. **Claves de MinIO / S3 (`STORAGE_ACCESS_KEY_ID` y `STORAGE_SECRET_ACCESS_KEY`):**
+2. **MinIO / S3 (`STORAGE_ACCESS_KEY_ID` y `STORAGE_SECRET_ACCESS_KEY`):**
    ```bash
-   STORAGE_ACCESS_KEY_ID=tu_usuario_minio
-   STORAGE_SECRET_ACCESS_KEY=tu_clave_secreta_minio_larga
+   STORAGE_ACCESS_KEY_ID=admin_s3_unoapi
+   STORAGE_SECRET_ACCESS_KEY=Upi83xv1nADEn5SgBBfsqZMtWBvV6e1o
+   ```
+3. **RabbitMQ (`RABBITMQ_DEFAULT_USER` y `RABBITMQ_DEFAULT_PASS`):**
+   ```bash
+   RABBITMQ_DEFAULT_USER=admin_rabbit_unoapi
+   RABBITMQ_DEFAULT_PASS=TGxLJn4LHFgvEtstPZYumufza6K7l0DQ
+   AMQP_URL=amqp://admin_rabbit_unoapi:TGxLJn4LHFgvEtstPZYumufza6K7l0DQ@rabbitmq:5672?frameMax=8192
+   ```
+4. **Redis (`REDIS_PASSWORD`):**
+   ```bash
+   REDIS_PASSWORD=hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK
+   REDIS_URL=redis://:hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK@redis:6379
    ```
 
-3. **Aplicar los cambios:**
-   Cada vez que edites el archivo `.env`, reinicia los contenedores para que carguen las nuevas variables:
+5. **Aplicar los cambios en el servidor:**
    ```bash
    docker compose down
    docker compose up -d
    ```
+
+---
+
+## 2.1 Descripción Detallada: ¿Para qué sirve cada página / servicio y cómo funciona?
+
+Para entender el ecosistema completo de Unoapi Cloud y sacarle el máximo provecho, aquí tienes el desglose exacto de cada uno de los 7 componentes y páginas del sistema:
+
+---
+
+### 1. Panel Web Unoapi (Unoapi Manager)
+* **URL en Producción:** `https://wapp-services.appoio.site`
+* **URL en Local:** `http://localhost:9876`
+* **Acceso:** Token de autenticación (`jsdoijohiewr948hwodjqsjdjldasdlk`)
+* **¿Para qué sirve?**
+  Es la **consola de administración visual** pensada para los humanos. Te permite:
+  1. Ver todos tus números de WhatsApp conectados en una sola tabla organizada con su estado en vivo (`online`, `connecting`, `offline`).
+  2. Crear nuevas instancias con **"Agregar Instancia"** asignándoles un nombre identificador (ej: *Ventas*, *Soporte*, *Cobranzas*).
+  3. Generar y mostrar en pantalla el **Código QR fresco** para escanear con la app de WhatsApp de tu celular (o generar el código de emparejamiento numérico de 8 dígitos).
+  4. Configurar opciones avanzadas por cada número: URL del Webhook, rechazo automático de llamadas telefónicas (`rejectCalls`), confirmaciones de lectura automáticas (`readOnReceipt`), e ignorar mensajes de grupos.
+* **¿Cómo funciona por detrás?**
+  Es una aplicación web servida por el contenedor `web` (Express + Bootstrap) que se comunica en tiempo real con el navegador mediante **WebSockets (Socket.IO)**. Cuando haces clic en "Conectar", envía una señal interna al contenedor `worker`. El `worker` inicializa el socket de Baileys, solicita un código QR a los servidores de WhatsApp, y lo envía al navegador en formato Base64. Al escanearlo con el teléfono celular, el estado se guarda inmediatamente en **Redis** como `online`.
+
+---
+
+### 2. API REST WhatsApp Cloud API
+* **URL en Producción:** `https://wapp-services.appoio.site/v15.0/:phone/messages`
+* **URL en Local:** `http://localhost:9876/v15.0/:phone/messages`
+* **Acceso:** Cabecera HTTP `Authorization: Bearer jsdoijohiewr948hwodjqsjdjldasdlk`
+* **¿Para qué sirve?**
+  Es la **interfaz programática para tus sistemas y aplicaciones** (tu backend en Node.js, Python, PHP, Laravel, tu CRM, tus chatbots de IA, n8n, etc.). Permite enviar mensajes de texto, fotos, documentos PDF, audios de voz `.ogg`, botones y reacciones a cualquier persona en el mundo sin necesidad de abrir un navegador web.
+* **¿Cómo funciona por detrás?**
+  Emula al 100% el formato oficial de la **Meta / Facebook WhatsApp Cloud API**:
+  1. Tu software hace una petición HTTP `POST` a la ruta `/v15.0/:phone/messages` con el cuerpo en formato JSON.
+  2. El contenedor `web` verifica el Bearer Token. Si es correcto, **no hace esperar a tu aplicación**; encola el mensaje en **RabbitMQ** y le responde inmediatamente a tu sistema con `200 OK` y un identificador único de mensaje (`wamid...`).
+  3. El contenedor `worker` toma el mensaje de la cola de RabbitMQ y lo transmite a los servidores de WhatsApp utilizando la sesión activa de Baileys.
+  4. Cuando WhatsApp entrega o lee el mensaje, Unoapi dispara un evento hacia tu **Webhook** para avisarle a tu sistema del cambio de estado.
+
+---
+
+### 3. MinIO Console (S3 Web UI)
+* **URL en Producción:** `http://134.209.115.23:9001`
+* **URL en Local:** `http://localhost:9001`
+* **Acceso:** Usuario: `admin_s3_unoapi` | Contraseña: `Upi83xv1nADEn5SgBBfsqZMtWBvV6e1o`
+* **¿Para qué sirve?**
+  Es un panel web visual idéntico a la consola de **Amazon Web Services (AWS S3)**, pero alojado 100% privado en tu propio servidor. Sirve para:
+  1. Explorar, previsualizar y descargar manualmente los archivos multimedia que entran y salen por WhatsApp (audios de voz, fotos, videos, documentos PDF, fotos de perfil).
+  2. Gestionar el espacio de almacenamiento y los "Buckets" (actualmente el bucket principal `unoapi`).
+* **¿Cómo funciona por detrás?**
+  Es la interfaz web de MinIO Server. Muestra el sistema de archivos montado en el volumen `/data` del contenedor Docker. Permite auditar qué archivos se están guardando y generar enlaces de descarga directos.
+
+---
+
+### 4. MinIO API (S3 Storage Endpoint)
+* **URL en Producción:** `http://134.209.115.23:9000`
+* **URL en Local:** `http://localhost:9000`
+* **Acceso:** Access Key: `admin_s3_unoapi` | Secret Key: `Upi83xv1nADEn5SgBBfsqZMtWBvV6e1o`
+* **¿Para qué sirve?**
+  Es el **endpoint técnico de almacenamiento S3** utilizado internamente por Unoapi para subir y descargar archivos binarios de forma rápida y eficiente.
+* **¿Cómo funciona por detrás?**
+  Cuando un usuario de WhatsApp te envía una foto o una nota de voz, guardar esos megabytes directamente en Redis o en RabbitMQ saturaría la memoria RAM del servidor. Por ello, el `worker` descarga el archivo binario de WhatsApp y lo transfiere vía protocolo S3 al puerto 9000 de MinIO, guardando en Redis únicamente la URL de referencia. Cuando tu backend consulta o recibe el archivo por Webhook, lo descarga velozmente desde este endpoint.
+
+---
+
+### 5. RabbitMQ Manager (Gestor de Colas de Mensajería)
+* **URL en Producción:** `http://134.209.115.23:15672`
+* **URL en Local:** `http://localhost:15672`
+* **Acceso:** Usuario: `admin_rabbit_unoapi` | Contraseña: `TGxLJn4LHFgvEtstPZYumufza6K7l0DQ`
+* **¿Para qué sirve?**
+  Es el panel de control del **Message Broker (Gestor de Colas)**. Sirve para:
+  1. Monitorear el volumen y la velocidad de tráfico de mensajes por segundo.
+  2. Ver cuántos mensajes están encolados esperando a ser enviados (cola `unoapi.incoming`).
+  3. Ver cuántos eventos recibidos están esperando a ser entregados a tus Webhooks (cola `unoapi.outgoing`).
+  4. Diagnosticar si algún mensaje falló o si hay reintentos programados.
+* **¿Cómo funciona por detrás?**
+  RabbitMQ aísla la recepción de peticiones del envío real:
+  - Si tu sistema envía 5,000 mensajes de golpe por la API REST, el contenedor `web` los deposita en RabbitMQ en segundos sin bloquearse.
+  - El `worker` va consumiendo esos mensajes a un ritmo controlado para proteger la salud de tu número de teléfono y evitar bloqueos por parte de WhatsApp.
+  - Si el servidor de WhatsApp tiene un corte de red temporal, los mensajes no se pierden: RabbitMQ los retiene en cola y los reintenta automáticamente tan pronto vuelve la conexión.
+
+---
+
+### 6. Redis Database (Base de Datos en Memoria)
+* **Host Interno:** `redis:6379` | **Host Servidor:** `127.0.0.1:6379`
+* **Acceso:** Usuario: `default` | Contraseña: `hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK`
+* **¿Para qué sirve?**
+  Es el **motor de almacenamiento de ultra alta velocidad en memoria RAM** donde reside el "cerebro" y la memoria activa de cada sesión de WhatsApp:
+  1. Almacena las claves criptográficas privadas de WhatsApp (Multi-Device Auth Keys de Baileys).
+  2. Guarda el estado de conexión de cada número (`online`, `offline`, `connecting`).
+  3. Guarda los metadatos de grupos, nombres de contactos y los estados de entrega de cada mensaje (`sent`, `delivered`, `read`).
+* **¿Cómo funciona por detrás?**
+  WhatsApp utiliza cifrado de extremo a extremo con algoritmos criptográficos que requieren cientos de lecturas de claves por segundo. Redis opera en memoria RAM pura (con persistencia en disco `appendonly yes`), permitiendo lecturas en menos de 1 milisegundo. Cuando reinicias el servidor o el contenedor del `worker`, este lee inmediatamente las claves desde Redis y restablece la conexión con WhatsApp en menos de 1 segundo sin requerir que vuelvas a escanear el código QR. Por seguridad, está protegido con contraseña obligatoria (`--requirepass`) y vinculado a localhost.
+
+---
+
+### 7. RedisInsight UI (Panel Gráfico para Redis)
+* **URL en Producción:** `http://134.209.115.23:5540`
+* **URL en Local:** `http://localhost:5540`
+* **Acceso:** Host: `redis`, Puerto: `6379`, Password: `hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK`
+* **¿Para qué sirve?**
+  Es la **interfaz gráfica oficial desarrollada por Redis** para inspeccionar las entrañas de la base de datos sin necesidad de usar la consola negra de comandos. Te permite:
+  1. Explorar visualmente las claves almacenadas (`unoapi-*`).
+  2. Ver el JSON exacto de configuración de tus sesiones activas.
+  3. Ver gráficas de consumo de memoria RAM de Redis y número de operaciones por segundo.
+  4. Abrir una consola interactiva CLI directamente en el navegador si necesitas ejecutar consultas avanzadas de Redis.
+* **¿Cómo funciona por detrás?**
+  Es un contenedor web independiente (`redis/redisinsight`) que se conecta internamente a `redis:6379` utilizando la contraseña maestra. Te ofrece un explorador tipo árbol para buscar y visualizar datos estructurados en tiempo real.
 
 ---
 
