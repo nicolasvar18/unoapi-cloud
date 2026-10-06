@@ -50,38 +50,43 @@ Todas las credenciales principales del sistema se configuran en el archivo `.env
 
 ### Resumen de Credenciales y Puertos de Producción / Local
 
+> ⚠️ **IMPORTANTE PARA REPOSITORIOS PÚBLICOS:**
+> Los valores mostrados a continuación son **placeholders / plantillas**. Nunca subas contraseñas reales a GitHub. En tu servidor o máquina local, copia el archivo [`.env.example`](file:///.env.example) como [`.env`](file:///.env) y define tus contraseñas privadas.
+
 | Servicio | URL / Host | Usuario / Identificador | Contraseña / Token | Notas de Seguridad |
 | :--- | :--- | :--- | :--- | :--- |
-| **Panel Web Unoapi** | `https://wapp-services.appoio.site` | Token de Acceso | `jsdoijohiewr948hwodjqsjdjldasdlk` | En cabecera `Authorization: Bearer <token>` |
-| **MinIO Console (S3)** | `http://134.209.115.23:9001` | `admin_s3_unoapi` | `Upi83xv1nADEn5SgBBfsqZMtWBvV6e1o` | Panel web de gestión S3 |
-| **MinIO API (S3)** | `http://134.209.115.23:9000` | `admin_s3_unoapi` | `Upi83xv1nADEn5SgBBfsqZMtWBvV6e1o` | Endpoint S3 para uploads/downloads |
-| **RabbitMQ Manager** | `http://134.209.115.23:15672` | `admin_rabbit_unoapi` | `TGxLJn4LHFgvEtstPZYumufza6K7l0DQ` | Usuario `guest` eliminado por seguridad |
-| **Redis Database** | `127.0.0.1:6379` | `default` | `hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK` | Protegido con `requirepass` y enlace a localhost |
-| **RedisInsight UI** | `http://134.209.115.23:5540` | Host: `redis`, Port: `6379` | `hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK` | Panel web para inspeccionar llaves Redis |
+| **Panel Web Unoapi** | `https://tu-dominio.com` | Token de Acceso | `tu_token_secreto_unoapi` | En cabecera `Authorization: Bearer <token>` |
+| **MinIO Console (S3)** | `http://IP_DE_TU_SERVIDOR:9001` | `usuario_minio` | `clave_minio` | Panel web de gestión S3 |
+| **MinIO API (S3)** | `http://IP_DE_TU_SERVIDOR:9000` | `usuario_minio` | `clave_minio` | Endpoint S3 para uploads/downloads |
+| **RabbitMQ Manager** | `http://IP_DE_TU_SERVIDOR:15672` | `usuario_rabbitmq` | `clave_rabbitmq` | El usuario `guest` debe ser eliminado |
+| **Redis Database** | `127.0.0.1:6379` | `default` | `clave_redis` | Protegido con `requirepass` y enlace a localhost |
+| **RedisInsight UI** | `http://IP_DE_TU_SERVIDOR:5540` | Host: `redis`, Port: `6379` | `clave_redis` | Panel web para inspeccionar llaves Redis |
 
 ### ¿Dónde y cómo cambiar o rotar estas credenciales?
 
-Todas las variables se encuentran en el archivo [`.env`](file:///.env) y se transmiten a través de `docker-compose.yml`:
+Todas las variables se configuran en el archivo [`.env`](file:///.env) (ignorado por Git en `.gitignore`) y se transmiten a los contenedores mediante `docker-compose.yml`:
 
 1. **Token Maestro de la API (`UNOAPI_AUTH_TOKEN`):**
    ```bash
-   UNOAPI_AUTH_TOKEN=tu_nuevo_token_secreto_super_seguro
+   UNOAPI_AUTH_TOKEN=tu_token_secreto_unoapi
    ```
 2. **MinIO / S3 (`STORAGE_ACCESS_KEY_ID` y `STORAGE_SECRET_ACCESS_KEY`):**
    ```bash
-   STORAGE_ACCESS_KEY_ID=admin_s3_unoapi
-   STORAGE_SECRET_ACCESS_KEY=Upi83xv1nADEn5SgBBfsqZMtWBvV6e1o
+   STORAGE_ACCESS_KEY_ID=usuario_minio
+   STORAGE_SECRET_ACCESS_KEY=clave_minio
+   MINIO_ROOT_USER=usuario_minio
+   MINIO_ROOT_PASSWORD=clave_minio
    ```
 3. **RabbitMQ (`RABBITMQ_DEFAULT_USER` y `RABBITMQ_DEFAULT_PASS`):**
    ```bash
-   RABBITMQ_DEFAULT_USER=admin_rabbit_unoapi
-   RABBITMQ_DEFAULT_PASS=TGxLJn4LHFgvEtstPZYumufza6K7l0DQ
-   AMQP_URL=amqp://admin_rabbit_unoapi:TGxLJn4LHFgvEtstPZYumufza6K7l0DQ@rabbitmq:5672?frameMax=8192
+   RABBITMQ_DEFAULT_USER=usuario_rabbitmq
+   RABBITMQ_DEFAULT_PASS=clave_rabbitmq
+   AMQP_URL=amqp://usuario_rabbitmq:clave_rabbitmq@rabbitmq:5672?frameMax=8192
    ```
 4. **Redis (`REDIS_PASSWORD`):**
    ```bash
-   REDIS_PASSWORD=hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK
-   REDIS_URL=redis://:hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK@redis:6379
+   REDIS_PASSWORD=clave_redis
+   REDIS_URL=redis://:clave_redis@redis:6379
    ```
 
 5. **Aplicar los cambios en el servidor:**
@@ -99,9 +104,8 @@ Para entender el ecosistema completo de Unoapi Cloud y sacarle el máximo provec
 ---
 
 ### 1. Panel Web Unoapi (Unoapi Manager)
-* **URL en Producción:** `https://wapp-services.appoio.site`
-* **URL en Local:** `http://localhost:9876`
-* **Acceso:** Token de autenticación (`jsdoijohiewr948hwodjqsjdjldasdlk`)
+* **URL en Producción:** `https://tu-dominio.com` (o `http://localhost:9876` en local)
+* **Acceso:** Token de autenticación (`tu_token_secreto_unoapi`)
 * **¿Para qué sirve?**
   Es la **consola de administración visual** pensada para los humanos. Te permite:
   1. Ver todos tus números de WhatsApp conectados en una sola tabla organizada con su estado en vivo (`online`, `connecting`, `offline`).
@@ -114,9 +118,8 @@ Para entender el ecosistema completo de Unoapi Cloud y sacarle el máximo provec
 ---
 
 ### 2. API REST WhatsApp Cloud API
-* **URL en Producción:** `https://wapp-services.appoio.site/v15.0/:phone/messages`
-* **URL en Local:** `http://localhost:9876/v15.0/:phone/messages`
-* **Acceso:** Cabecera HTTP `Authorization: Bearer jsdoijohiewr948hwodjqsjdjldasdlk`
+* **URL en Producción:** `https://tu-dominio.com/v15.0/:phone/messages` (o `http://localhost:9876/v15.0/:phone/messages` en local)
+* **Acceso:** Cabecera HTTP `Authorization: Bearer tu_token_secreto_unoapi`
 * **¿Para qué sirve?**
   Es la **interfaz programática para tus sistemas y aplicaciones** (tu backend en Node.js, Python, PHP, Laravel, tu CRM, tus chatbots de IA, n8n, etc.). Permite enviar mensajes de texto, fotos, documentos PDF, audios de voz `.ogg`, botones y reacciones a cualquier persona en el mundo sin necesidad de abrir un navegador web.
 * **¿Cómo funciona por detrás?**
@@ -129,9 +132,8 @@ Para entender el ecosistema completo de Unoapi Cloud y sacarle el máximo provec
 ---
 
 ### 3. MinIO Console (S3 Web UI)
-* **URL en Producción:** `http://134.209.115.23:9001`
-* **URL en Local:** `http://localhost:9001`
-* **Acceso:** Usuario: `admin_s3_unoapi` | Contraseña: `Upi83xv1nADEn5SgBBfsqZMtWBvV6e1o`
+* **URL en Producción:** `http://IP_DE_TU_SERVIDOR:9001` (o `http://localhost:9001` en local)
+* **Acceso:** Usuario: `usuario_minio` | Contraseña: `clave_minio`
 * **¿Para qué sirve?**
   Es un panel web visual idéntico a la consola de **Amazon Web Services (AWS S3)**, pero alojado 100% privado en tu propio servidor. Sirve para:
   1. Explorar, previsualizar y descargar manualmente los archivos multimedia que entran y salen por WhatsApp (audios de voz, fotos, videos, documentos PDF, fotos de perfil).
@@ -142,9 +144,8 @@ Para entender el ecosistema completo de Unoapi Cloud y sacarle el máximo provec
 ---
 
 ### 4. MinIO API (S3 Storage Endpoint)
-* **URL en Producción:** `http://134.209.115.23:9000`
-* **URL en Local:** `http://localhost:9000`
-* **Acceso:** Access Key: `admin_s3_unoapi` | Secret Key: `Upi83xv1nADEn5SgBBfsqZMtWBvV6e1o`
+* **URL en Producción:** `http://IP_DE_TU_SERVIDOR:9000` (o `http://localhost:9000` en local)
+* **Acceso:** Access Key: `usuario_minio` | Secret Key: `clave_minio`
 * **¿Para qué sirve?**
   Es el **endpoint técnico de almacenamiento S3** utilizado internamente por Unoapi para subir y descargar archivos binarios de forma rápida y eficiente.
 * **¿Cómo funciona por detrás?**
@@ -153,9 +154,8 @@ Para entender el ecosistema completo de Unoapi Cloud y sacarle el máximo provec
 ---
 
 ### 5. RabbitMQ Manager (Gestor de Colas de Mensajería)
-* **URL en Producción:** `http://134.209.115.23:15672`
-* **URL en Local:** `http://localhost:15672`
-* **Acceso:** Usuario: `admin_rabbit_unoapi` | Contraseña: `TGxLJn4LHFgvEtstPZYumufza6K7l0DQ`
+* **URL en Producción:** `http://IP_DE_TU_SERVIDOR:15672` (o `http://localhost:15672` en local)
+* **Acceso:** Usuario: `usuario_rabbitmq` | Contraseña: `clave_rabbitmq`
 * **¿Para qué sirve?**
   Es el panel de control del **Message Broker (Gestor de Colas)**. Sirve para:
   1. Monitorear el volumen y la velocidad de tráfico de mensajes por segundo.
@@ -172,7 +172,7 @@ Para entender el ecosistema completo de Unoapi Cloud y sacarle el máximo provec
 
 ### 6. Redis Database (Base de Datos en Memoria)
 * **Host Interno:** `redis:6379` | **Host Servidor:** `127.0.0.1:6379`
-* **Acceso:** Usuario: `default` | Contraseña: `hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK`
+* **Acceso:** Usuario: `default` | Contraseña: `clave_redis`
 * **¿Para qué sirve?**
   Es el **motor de almacenamiento de ultra alta velocidad en memoria RAM** donde reside el "cerebro" y la memoria activa de cada sesión de WhatsApp:
   1. Almacena las claves criptográficas privadas de WhatsApp (Multi-Device Auth Keys de Baileys).
@@ -184,9 +184,8 @@ Para entender el ecosistema completo de Unoapi Cloud y sacarle el máximo provec
 ---
 
 ### 7. RedisInsight UI (Panel Gráfico para Redis)
-* **URL en Producción:** `http://134.209.115.23:5540`
-* **URL en Local:** `http://localhost:5540`
-* **Acceso:** Host: `redis`, Puerto: `6379`, Password: `hwGss71zBj7XBjz0OtmTFbEK9fYQ90YK`
+* **URL en Producción:** `http://IP_DE_TU_SERVIDOR:5540` (o `http://localhost:5540` en local)
+* **Acceso:** Host: `redis`, Puerto: `6379`, Password: `clave_redis`
 * **¿Para qué sirve?**
   Es la **interfaz gráfica oficial desarrollada por Redis** para inspeccionar las entrañas de la base de datos sin necesidad de usar la consola negra de comandos. Te permite:
   1. Explorar visualmente las claves almacenadas (`unoapi-*`).
@@ -194,7 +193,7 @@ Para entender el ecosistema completo de Unoapi Cloud y sacarle el máximo provec
   3. Ver gráficas de consumo de memoria RAM de Redis y número de operaciones por segundo.
   4. Abrir una consola interactiva CLI directamente en el navegador si necesitas ejecutar consultas avanzadas de Redis.
 * **¿Cómo funciona por detrás?**
-  Es un contenedor web independiente (`redis/redisinsight`) que se conecta internamente a `redis:6379` utilizando la contraseña maestra. Te ofrece un explorador tipo árbol para buscar y visualizar datos estructurados en tiempo real.
+  Es un contenedor web independiente (`redis/redisinsight`) que se conecta internamente a `redis:6379` utilizando la contraseña configurada. Te ofrece un explorador tipo árbol para buscar y visualizar datos estructurados en tiempo real.
 
 ---
 
@@ -207,7 +206,7 @@ Unoapi incluye un panel de control web listo para usar:
 1. Abre en tu navegador: [http://localhost:9876](http://localhost:9876)
 2. Verás una pantalla solicitando el Token configurado. Ingresa tu token (definido en `.env`):
    ```text
-   jsdoijohiewr948hwodjqsjdjldasdlk
+   tu_token_secreto_unoapi
    ```
 3. Haz clic en **Ingresar** (o Conectar). Entrarás a la tabla de sesiones de Unoapi.
 
@@ -244,7 +243,7 @@ Abre una terminal y ejecuta el siguiente comando reemplazando:
 curl -i -X POST \
   http://localhost:9876/v15.0/TU_NUMERO_CONECTADO/messages \
   -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer jsdoijohiewr948hwodjqsjdjldasdlk' \
+  -H 'Authorization: Bearer tu_token_secreto_unoapi' \
   -d '{
     "messaging_product": "whatsapp",
     "to": "NUMERO_DESTINO",
@@ -272,16 +271,16 @@ Para que tu aplicación o backend reciba los mensajes que te envían los usuario
 ### Paso 5: Monitorear la infraestructura (Opcional)
 Puedes abrir los paneles de soporte que están corriendo en tu Docker:
 1. **RedisInsight (Ver sesiones y caché en Redis):**
-   * Entra a: [http://localhost:5540](http://localhost:5540)
-   * Haz clic en **Add Redis Database** > Host: `redis`, Puerto: `6379`.
+   * Entra a: [http://localhost:5540](http://localhost:5540) (o tu servidor en el puerto 5540)
+   * Haz clic en **Add Redis Database** > Host: `redis`, Puerto: `6379`, Password: `clave_redis` (la que configuraste en tu `.env`).
    * Podrás ver las claves de autenticación y los estados de cada sesión.
 2. **MinIO Console (Ver archivos multimedia recibidos/enviados):**
-   * Entra a: [http://localhost:9001](http://localhost:9001)
-   * Usuario: `my-minio` | Contraseña: `2NVQWHTTT3asdasMgqapGchy6yAMZn`
+   * Entra a: [http://localhost:9001](http://localhost:9001) (o tu servidor en el puerto 9001)
+   * Usuario: `usuario_minio` | Contraseña: `clave_minio` (definidas en tu `.env`)
    * Verás el bucket `unoapi` con los audios, imágenes y documentos transferidos.
 3. **RabbitMQ Dashboard (Ver colas y tráfico de mensajes):**
-   * Entra a: [http://localhost:15672](http://localhost:15672)
-   * Usuario: `guest` | Contraseña: `guest`
+   * Entra a: [http://localhost:15672](http://localhost:15672) (o tu servidor en el puerto 15672)
+   * Usuario: `usuario_rabbitmq` | Contraseña: `clave_rabbitmq` (definidas en tu `.env`)
    * Podrás inspeccionar las colas de mensajes salientes, reintentos y transcripciones.
 
 ---
@@ -320,7 +319,7 @@ Unoapi Cloud implementa la especificación oficial de **Meta WhatsApp Cloud API 
 * **Base URL:** `http://localhost:9876` (o tu dominio en producción)
 * **Header de Autenticación Obligatorio:**
   ```http
-  Authorization: Bearer jsdoijohiewr948hwodjqsjdjldasdlk
+  Authorization: Bearer tu_token_secreto_unoapi
   Content-Type: application/json
   ```
 
@@ -334,7 +333,7 @@ Permite consultar el estado de todos tus números:
 
 ```bash
 curl -X GET "http://localhost:9876/sessions" \
-  -H "Authorization: Bearer jsdoijohiewr948hwodjqsjdjldasdlk"
+  -H "Authorization: Bearer tu_token_secreto_unoapi"
 ```
 
 **Respuesta de ejemplo (200 OK):**
@@ -367,7 +366,7 @@ curl -X GET "http://localhost:9876/sessions" \
 
 ```bash
 curl -X POST "http://localhost:9876/v15.0/573208738309/messages" \
-  -H "Authorization: Bearer jsdoijohiewr948hwodjqsjdjldasdlk" \
+  -H "Authorization: Bearer tu_token_secreto_unoapi" \
   -H "Content-Type: application/json" \
   -d '{
     "messaging_product": "whatsapp",
@@ -403,7 +402,7 @@ curl -X POST "http://localhost:9876/v15.0/573208738309/messages" \
 
 ```bash
 curl -X POST "http://localhost:9876/v15.0/573208738309/messages" \
-  -H "Authorization: Bearer jsdoijohiewr948hwodjqsjdjldasdlk" \
+  -H "Authorization: Bearer tu_token_secreto_unoapi" \
   -H "Content-Type: application/json" \
   -d '{
     "messaging_product": "whatsapp",
@@ -425,7 +424,7 @@ curl -X POST "http://localhost:9876/v15.0/573208738309/messages" \
 
 ```bash
 curl -X POST "http://localhost:9876/v15.0/573208738309/messages" \
-  -H "Authorization: Bearer jsdoijohiewr948hwodjqsjdjldasdlk" \
+  -H "Authorization: Bearer tu_token_secreto_unoapi" \
   -H "Content-Type: application/json" \
   -d '{
     "messaging_product": "whatsapp",
@@ -448,7 +447,7 @@ curl -X POST "http://localhost:9876/v15.0/573208738309/messages" \
 
 ```bash
 curl -X POST "http://localhost:9876/v15.0/573208738309/messages" \
-  -H "Authorization: Bearer jsdoijohiewr948hwodjqsjdjldasdlk" \
+  -H "Authorization: Bearer tu_token_secreto_unoapi" \
   -H "Content-Type: application/json" \
   -d '{
     "messaging_product": "whatsapp",
@@ -466,7 +465,7 @@ curl -X POST "http://localhost:9876/v15.0/573208738309/messages" \
 
 ```bash
 curl -X POST "http://localhost:9876/v15.0/573208738309/messages" \
-  -H "Authorization: Bearer jsdoijohiewr948hwodjqsjdjldasdlk" \
+  -H "Authorization: Bearer tu_token_secreto_unoapi" \
   -H "Content-Type: application/json" \
   -d '{
     "messaging_product": "whatsapp",

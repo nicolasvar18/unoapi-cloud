@@ -8,12 +8,16 @@ x-base: &base
     - ./:/app
     - /app/node_modules
   working_dir: /app
+  env_file:
+    - .env
   environment:
     NODE_ENV: development
-    AMQP_URL: amqp://guest:guest@rabbitmq:5672?frameMax=8192
+    AMQP_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672?frameMax=8192
     BASE_URL: http://web:9876
-    REDIS_URL: redis://redis:6379
+    REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
     STORAGE_ENDPOINT: http://minio:9000
+    STORAGE_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY_ID}
+    STORAGE_SECRET_ACCESS_KEY: ${STORAGE_SECRET_ACCESS_KEY}
     UNOAPI_URL: http://web:9876
     WEBHOOK_URL: http://web:9876/webhooks/fake
     DEFAULT_LOCALE: es
@@ -50,6 +54,9 @@ services:
   rabbitmq:
     image: rabbitmq:4-management-alpine
     restart: on-failure
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     ports:
       - 5672:5672
       - 15672:15672
@@ -61,9 +68,9 @@ services:
     restart: on-failure
     volumes:
       - redis:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     ports:
-      - 6379:6379
+      - 127.0.0.1:6379:6379
 
   insight:
     image: redis/redisinsight
