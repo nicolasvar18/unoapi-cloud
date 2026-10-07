@@ -671,6 +671,7 @@
         let currentPhoneNumber = ''
         let currentQrTimeOut = ''
         let lastTimeout = undefined
+        let qrPollInterval = null;
         
         const onBroadcast = function(data) {
           if (data.phone == currentPhoneNumber) {
@@ -684,11 +685,17 @@
                   clearTimeout(lastTimeout);
                 }
                 lastTimeout = setTimeout(function() {
-                  statusDiv.innerHTML = `<span class="badge bg-warning text-dark mb-2 p-2 fs-6">El código QR ha expirado</span><br><small class="text-muted">Pulsa "Regenerar Código QR" para generar uno nuevo</small>`;
-                }, 30000);
+                  if (currentPhoneNumber && !qrcodes[currentPhoneNumber]) {
+                    statusDiv.innerHTML = `<span class="badge bg-warning text-dark mb-2 p-2 fs-6">Esperando nuevo código...</span><br><small class="text-muted">Pulsa "Regenerar Código QR" si no avanza</small>`;
+                  }
+                }, 45000);
             } else if (data.type === 'status' && data.content) {
                 const lower = data.content.toLowerCase();
                 if (lower.indexOf('connected with') !== -1 || lower.indexOf('conectado con') !== -1 || lower.indexOf('online') !== -1) {
+                    if (qrPollInterval) {
+                        clearInterval(qrPollInterval);
+                        qrPollInterval = null;
+                    }
                     qrcodeDiv.innerHTML = '<div class="alert alert-success mt-3 py-3"><i class="fas fa-check-circle fa-3x mb-2 text-success d-block"></i><strong>¡WhatsApp vinculado exitosamente!</strong></div>';
                     statusDiv.textContent = `¡Conectado!`;
                     setTimeout(function() {
@@ -696,6 +703,10 @@
                         fetchSessions(localStorage.getItem(tokenKey), true);
                     }, 2000);
                 } else if (lower.indexOf('generate qrcode is exceded') !== -1 || lower.indexOf('superado el límite') !== -1) {
+                    if (qrPollInterval) {
+                        clearInterval(qrPollInterval);
+                        qrPollInterval = null;
+                    }
                     qrcodeDiv.innerHTML = '<div class="alert alert-warning py-2">Se superó el tiempo para escanear el código QR.</div>';
                     statusDiv.innerHTML = '<span class="text-danger fw-bold">Código expirado</span><br><small>Haz clic en "Regenerar Código QR" para solicitar uno nuevo.</small>';
                 } else {
@@ -1362,10 +1373,14 @@
                 if (token) {
                     currentPhoneNumber = number;
                     delete qrcodes[number];
+                    if (qrPollInterval) {
+                        clearInterval(qrPollInterval);
+                        qrPollInterval = null;
+                    }
                     const qrcodeDiv = document.getElementById('qrCodeContainer');
                     const statusDiv = document.getElementById('qrCodeMessage');
                     qrcodeDiv.innerHTML = '<div class="spinner-border text-success my-4" role="status"><span class="visually-hidden">Cargando...</span></div>';
-                    statusDiv.innerHTML = '<span class="text-primary fw-bold">Solicitando código QR en vivo...</span><br><small class="text-muted">Conectando con WhatsApp...</small>';
+                    statusDiv.innerHTML = '<span class="text-primary fw-bold">Solicitando código QR en vivo...</span><br><small class="text-muted">Conectando con WhatsApp (tarda de 3 a 5 segundos)...</small>';
 
                     fetch(`${apiUrl}/v15.0/${number}`, {
                         headers: {
@@ -1385,7 +1400,8 @@
                         }
                     })
                     .catch(error => {
-                        console.error("Error al verificar estado:", error);
+                        console.error("Error al verificar estado inicial:", error);
+                        attemptRegister(number, token);
                     });
                 } else {
                     alert("Token no encontrado.");
@@ -1397,14 +1413,22 @@
                 if (currentPhoneNumber) {
                     const token = localStorage.getItem(tokenKey);
                     delete qrcodes[currentPhoneNumber];
+                    if (qrPollInterval) {
+                        clearInterval(qrPollInterval);
+                        qrPollInterval = null;
+                    }
                     document.getElementById('qrCodeContainer').innerHTML = '<div class="spinner-border text-success my-4" role="status"><span class="visually-hidden">Cargando...</span></div>';
-                    document.getElementById('qrCodeMessage').innerHTML = '<span class="text-primary fw-bold">Generando nuevo código QR en vivo...</span><br><small class="text-muted">Por favor espera unos segundos</small>';
+                    document.getElementById('qrCodeMessage').innerHTML = '<span class="text-primary fw-bold">Generando nuevo código QR en vivo...</span><br><small class="text-muted">Por favor espera unos segundos...</small>';
                     attemptRegister(currentPhoneNumber, token);
                 }
             });
 
-            // Init qrcode and confirm
+            // Init qrcode and start safe polling
             function attemptRegister(number, token) {
+                if (qrPollInterval) {
+                    clearInterval(qrPollInterval);
+                    qrPollInterval = null;
+                }
                 fetch(`${apiUrl}/v15.0/${number}/register`, {
                     method: 'POST',
                     headers: {
@@ -1416,21 +1440,31 @@
                     if (!response.ok) throw new Error("Error al solicitar registro.");
                     return response.json();
                 })
-                .then((data) => {
-                    checkStatusAndRetry(number, token, data.qrTimeoutMs);
+                .then(() => {
+                    checkStatusAndRetry(number, token);
                 })
                 .catch(error => {
                     alert(error.message);
                 });
             }
 
-            // Check connecting status
-            function checkStatusAndRetry(number, token, qrTimeoutMs) {
-                let attempts = 0;
-                const maxAttempts = 3;
-                connectToWebSocket(number, qrTimeoutMs);
+            // Safe status polling without repeated /register loops
+            function checkStatusAndRetry(number, token) {
+                if (qrPollInterval) {
+                    clearInterval(qrPollInterval);
+                    qrPollInterval = null;
+                }
+                connectToWebSocket(number);
 
-                const intervalId = setInterval(() => {
+                let elapsedSeconds = 0;
+                qrPollInterval = setInterval(() => {
+                    elapsedSeconds += 2;
+                    if (currentPhoneNumber !== number) {
+                        clearInterval(qrPollInterval);
+                        qrPollInterval = null;
+                        return;
+                    }
+
                     fetch(`${apiUrl}/v15.0/${number}`, {
                         headers: {
                             'Authorization': `Bearer ${token}`
@@ -1441,48 +1475,63 @@
                         return response.json();
                     })
                     .then(data => {
-                        if (data.status === 'connecting') {
-                            clearInterval(intervalId);
-                        } else if (attempts < maxAttempts && data.status !== 'connecting') {
-                            attempts++;
-                            fetch(`${apiUrl}/v15.0/${number}/register`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    Authorization: `Bearer ${token}`
-                                }
-                            })
-                            .catch(error => {
-                                clearInterval(intervalId);
-                                alert(error.message);
-                            });
-                        } else {
-                            clearInterval(intervalId);
-                            console.log("La API no generó el código QR.");
+                        if (currentPhoneNumber !== number) return;
+
+                        if (data.status === 'online') {
+                            clearInterval(qrPollInterval);
+                            qrPollInterval = null;
+                            const qrcodeDiv = document.getElementById('qrCodeContainer');
+                            const statusDiv = document.getElementById('qrCodeMessage');
+                            qrcodeDiv.innerHTML = '<div class="alert alert-success mt-3 py-3"><i class="fas fa-check-circle fa-3x mb-2 text-success d-block"></i><strong>¡WhatsApp vinculado exitosamente!</strong></div>';
+                            statusDiv.innerHTML = '<span class="text-success fw-bold">¡Conectado y en línea!</span>';
+                            setTimeout(function() {
+                                $('#connectModal').modal('hide');
+                                fetchSessions(token, true);
+                            }, 2000);
+                            return;
+                        }
+
+                        // Si la API tiene el QR disponible y aún no se muestra o se actualizó
+                        if (data.qrcode && (!qrcodes[number] || qrcodes[number] !== data.qrcode)) {
+                            qrcodes[number] = data.qrcode;
+                            const qrcodeDiv = document.getElementById('qrCodeContainer');
+                            const statusDiv = document.getElementById('qrCodeMessage');
+                            qrcodeDiv.innerHTML = `<img src="${data.qrcode}" alt="Código QR" style="max-width: 280px; width: 100%; border: 6px solid #f8f9fa; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">`;
+                            statusDiv.innerHTML = `<span class="badge bg-success mb-2 p-2 fs-6">Escanea este código con WhatsApp</span><br><small class="text-muted">Abre WhatsApp en tu teléfono > Dispositivos vinculados > Vincular dispositivo</small>`;
+                        }
+
+                        if (elapsedSeconds > 240) {
+                            clearInterval(qrPollInterval);
+                            qrPollInterval = null;
+                            const statusDiv = document.getElementById('qrCodeMessage');
+                            statusDiv.innerHTML = `<span class="badge bg-warning text-dark mb-2 p-2 fs-6">Tiempo de espera agotado</span><br><small class="text-muted">Haz clic en "Regenerar Código QR" para solicitar uno nuevo</small>`;
                         }
                     })
                     .catch(error => {
                         console.error("Error al verificar estado:", error);
                     });
-                }, 3000); 
+                }, 2000); 
             }
 
             // Connect to websocket 
-            function connectToWebSocket(phoneNumber, qrTimeoutMs) {
+            function connectToWebSocket(phoneNumber) {
               currentPhoneNumber = phoneNumber;
-              currentQrTimeOut = qrTimeoutMs;
               if (qrcodes[phoneNumber]) {
                 const qrcodeDiv = document.getElementById('qrCodeContainer');
                 const statusDiv = document.getElementById('qrCodeMessage');
-                qrcodeDiv.innerHTML = `<img src="${qrcodes[phoneNumber]}" alt="Código QR">`;
-                statusDiv.textContent = 'Escanea el código QR con WhatsApp';
+                qrcodeDiv.innerHTML = `<img src="${qrcodes[phoneNumber]}" alt="Código QR" style="max-width: 280px; width: 100%; border: 6px solid #f8f9fa; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">`;
+                statusDiv.innerHTML = `<span class="badge bg-success mb-2 p-2 fs-6">Escanea este código con WhatsApp</span><br><small class="text-muted">Abre WhatsApp en tu teléfono > Dispositivos vinculados > Vincular un dispositivo</small>`;
               }
             }
 
-            // Disconnect websocket on modal close
+            // Disconnect websocket and clear polling on modal close
             $('#connectModal').on('hidden.bs.modal', function () {
-              currentPhoneNumber = ''
-              currentQrTimeOut = ''
+              if (qrPollInterval) {
+                clearInterval(qrPollInterval);
+                qrPollInterval = null;
+              }
+              currentPhoneNumber = '';
+              currentQrTimeOut = '';
               document.getElementById('qrCodeContainer').innerHTML = '';
               document.getElementById('qrCodeMessage').textContent = 'Esperando el código QR / Código de emparejamiento...';
             });            

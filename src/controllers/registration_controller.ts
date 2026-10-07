@@ -24,7 +24,9 @@ export class RegistrationController {
     logger.debug('register query %s', JSON.stringify(req.query))
     const { phone } = req.params
     try {
-      await setConfig(phone, req.body)
+      if (req.body && Object.keys(req.body).length > 0) {
+        await setConfig(phone, req.body)
+      }
       this.reload.run(phone)
       const config = await this.getConfig(phone)
       return res.status(200).json(config)

@@ -32,13 +32,14 @@ import { Response } from './response'
 import QRCode from 'qrcode'
 import { Template } from './template'
 import logger from './logger'
-import { CONVERT_AUDIO_MESSAGE_TO_OGG, FETCH_TIMEOUT_MS, VALIDATE_MEDIA_LINK_BEFORE_SEND } from '../defaults'
+import { CONVERT_AUDIO_MESSAGE_TO_OGG, FETCH_TIMEOUT_MS, MAX_QRCODE_GENERATE, VALIDATE_MEDIA_LINK_BEFORE_SEND } from '../defaults'
 import { t } from '../i18n'
 import { ClientForward } from './client_forward'
 import { SendError } from './send_error'
 import audioConverter from '../utils/audio_converter'
+import { saveLatestQr, clearLatestQr } from './redis'
 
-const attempts = 3
+const attempts = MAX_QRCODE_GENERATE
 
 interface Delay {
   (phone: string, to: string): Promise<void>
@@ -197,6 +198,7 @@ export class ClientBaileys implements Client {
     logger.debug('Received qrcode %s %s', this.phone, qrCode)
     const id = generateUnoId('QR')
     const qrCodeUrl = await QRCode.toDataURL(qrCode)
+    await saveLatestQr(this.phone, qrCodeUrl).catch(() => {})
     const remoteJid = phoneNumberToJid(this.phone)
     const waMessageKey = {
       fromMe: true,
@@ -316,6 +318,7 @@ export class ClientBaileys implements Client {
     logger.debug('Disconnect client store for %s', this?.phone)
     this.store = undefined
 
+    await clearLatestQr(this?.phone).catch(() => {})
     await this.close()
     clients.delete(this?.phone)
     configs.delete(this?.phone)
@@ -336,16 +339,22 @@ export class ClientBaileys implements Client {
       logger.debug('messages.upsert %s', this.phone, JSON.stringify(payload))
       await this.listener.process(this.phone, payload.messages, payload.type)
       if (this.config.readOnReceipt && payload.messages[0] && !payload.messages[0]?.fromMe) {
-        await Promise.all(
-          payload.messages
-            .filter((message: any) => {
-              const messageType = getMessageType(message)
-              return !message?.key?.fromMe && messageType && TYPE_MESSAGES_TO_READ.includes(messageType)
-            })
-            .map(async (message: any) => {
-              return this.readMessages([message.key!])
-            }),
-        )
+        try {
+          await Promise.all(
+            payload.messages
+              .filter((message: any) => {
+                const messageType = getMessageType(message)
+                return !message?.key?.fromMe && messageType && TYPE_MESSAGES_TO_READ.includes(messageType)
+              })
+              .map(async (message: any) => {
+                return this.readMessages([message.key!]).catch((err: any) => {
+                  logger.debug('readMessages ignored error on receipt for %s: %s', this.phone, err?.message || err)
+                })
+              }),
+          )
+        } catch (err: any) {
+          logger.debug('readOnReceipt caught error for %s: %s', this.phone, err?.message || err)
+        }
       }
     })
     this.event('messages.update', async (messages: object[]) => {

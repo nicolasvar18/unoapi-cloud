@@ -30,6 +30,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import NodeCache from 'node-cache'
 import { useVoiceCallsBaileys } from 'voice-calls-baileys/lib/services/transport.model'
 import { emailNotifier } from './email_notifier'
+import { clearLatestQr } from './redis'
 import {
   DEFAULT_BROWSER,
   CONNECTING_TIMEOUT_MS,
@@ -267,6 +268,7 @@ export const connect = async ({
   const onOpen = async () => {
     status.attempt = 1
     await sessionStore.setStatus(phone, 'online')
+    await clearLatestQr(phone).catch(() => {})
     logger.info(`${phone} connected`)
     const { version } = await fetchLatestBaileysVersion()
 
@@ -478,10 +480,21 @@ export const connect = async ({
   }
 
   const read: readMessages = async (keys: WAMessageKey[]) => {
-    await validateStatus()
-
-    await sock?.readMessages(keys)
-    return true
+    try {
+      if (!sock) {
+        logger.debug('readMessages skipped: socket is not available %s', phone)
+        return false
+      }
+      if ((await sessionStore.isStatusDisconnect(phone)) || (await sessionStore.isStatusOffline(phone))) {
+        logger.debug('readMessages skipped: session offline or disconnected %s', phone)
+        return false
+      }
+      await sock?.readMessages(keys)
+      return true
+    } catch (err: any) {
+      logger.warn('readMessages error for %s: %s', phone, err?.message || err)
+      return false
+    }
   }
 
   if (config.autoRestartMs) {

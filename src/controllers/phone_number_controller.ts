@@ -4,6 +4,7 @@ import { SessionStore } from '../services/session_store'
 import logger from '../services/logger'
 import { getAuthHeaderToken } from '../services/security'
 import { UNOAPI_AUTH_TOKEN } from '../defaults'
+import { getLatestQr } from '../services/redis'
 
 export class PhoneNumberController {
   private getConfig: getConfig
@@ -26,11 +27,14 @@ export class PhoneNumberController {
       const store = await config.getStore(phone, config)
       logger.debug('Session store retrieved!')
       const { sessionStore } = store
+      const status = await sessionStore.getStatus(phone)
+      const qrcode = status !== 'online' ? await getLatestQr(phone) : null
       const templates = await store.dataStore.loadTemplates()
       logger.debug('Templates retrieved!')
       return res.status(200).json({
         display_phone_number: phone.replace('+', ''),
-        status: await sessionStore.getStatus(phone),
+        status,
+        qrcode: qrcode || undefined,
         message_templates: { data: templates },
         ...config,
       })

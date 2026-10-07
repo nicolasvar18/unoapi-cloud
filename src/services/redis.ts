@@ -70,7 +70,7 @@ export const redisTtl = async (key: string) => {
   }
 }
 
-const redisDel = async (key: string) => {
+export const redisDel = async (key: string) => {
   logger.trace(`Deleting ${key}`)
   try {
     return client.del(key)
@@ -555,3 +555,19 @@ export const setGlobalSmtpConfig = async (config: any) => {
   await redisSet(key, JSON.stringify(config))
   return config
 }
+
+export const saveLatestQr = async (phone: string, qrDataUrl: string) => {
+  const key = `${BASE_KEY}qrcode:${phone}`
+  return redisSetAndExpire(key, qrDataUrl, 90)
+}
+
+export const getLatestQr = async (phone: string): Promise<string | null> => {
+  const key = `${BASE_KEY}qrcode:${phone}`
+  return redisGet(key)
+}
+
+export const clearLatestQr = async (phone: string) => {
+  const key = `${BASE_KEY}qrcode:${phone}`
+  return redisDel(key)
+}
+
