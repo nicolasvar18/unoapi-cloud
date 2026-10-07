@@ -55,7 +55,8 @@ Todas las credenciales principales del sistema se configuran en el archivo `.env
 
 | Servicio | URL / Host | Usuario / Identificador | Contraseña / Token | Notas de Seguridad |
 | :--- | :--- | :--- | :--- | :--- |
-| **Panel Web Unoapi** | `https://tu-dominio.com` | Token de Acceso | `tu_token_secreto_unoapi` | En cabecera `Authorization: Bearer <token>` |
+| **Panel Web Unoapi** | `https://tu-dominio.com` | `usuario_panel_web` (ej: `admin`) | `clave_panel_web` | Acceso con usuario y contraseña definidos en `.env` |
+| **API REST WhatsApp** | `https://tu-dominio.com/v15.0/...` | Bearer Token | `tu_token_secreto_unoapi` | En cabecera `Authorization: Bearer <token>` |
 | **MinIO Console (S3)** | `http://IP_DE_TU_SERVIDOR:9001` | `usuario_minio` | `clave_minio` | Panel web de gestión S3 |
 | **MinIO API (S3)** | `http://IP_DE_TU_SERVIDOR:9000` | `usuario_minio` | `clave_minio` | Endpoint S3 para uploads/downloads |
 | **RabbitMQ Manager** | `http://IP_DE_TU_SERVIDOR:15672` | `usuario_rabbitmq` | `clave_rabbitmq` | El usuario `guest` debe ser eliminado |
@@ -521,46 +522,89 @@ Cada sesión tiene campos para conectar directamente con OpenAI:
 
 ## 7. Webhooks: Recepción de Mensajes en Tiempo Real
 
-Para recibir mensajes entrantes y crear un bot o conectar un CRM, debes configurar un **Webhook**:
+El **Webhook** es el mecanismo mediante el cual Unoapi **le notifica a tu sistema en tiempo real (Push Notification)** cada vez que ocurre un evento en WhatsApp, eliminando la necesidad de consultar la API constantemente.
 
-1. En la tabla de sesiones, haz clic en **Editar** en el número deseado.
-2. Desplázate hasta la sección **Webhooks** al final del modal.
-3. Haz clic en **Agregar Webhook**:
-   * **URL Absoluta:** La URL de tu backend donde quieres recibir los eventos (ej: `https://tu-api.com/api/whatsapp-webhook` o un webhook de n8n / Make).
-   * **Token (Opcional):** Un token secreto para validar la procedencia.
-   * **Enviar Nuevos Mensajes:** Actívalo para recibir mensajes entrantes de los clientes.
-   * **Enviar Actualizaciones de Mensajes:** Actívalo si deseas saber cuándo tus mensajes fueron entregados (`delivered`) o leídos (`read`).
-   * **Enviar Transcripción de Audio:** Actívalo si usas Whisper para recibir el audio convertido en texto.
-4. Haz clic en **Guardar**.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Cliente as 👤 Cliente en WhatsApp
+    participant Worker as ⚙️ Unoapi (Worker/Baileys)
+    participant Broker as 📬 RabbitMQ
+    participant Webhook as 🌐 Tu Servidor / Webhook
 
-### Formato del Payload que enviará Unoapi a tu Webhook:
+    Cliente->>Worker: Envía mensaje: "Hola, información por favor"
+    Note over Worker: Procesa y descarga audios/fotos a MinIO
+    Worker->>Broker: Encola evento en unoapi.outgoing
+    Broker->>Webhook: HTTP POST con JSON del mensaje
+    Webhook-->>Broker: Responde HTTP 200 OK
+    Note over Webhook: Tu bot responde o tu CRM guarda el chat
+```
 
-Cuando un cliente te escribe, tu servidor recibirá un `POST` con esta estructura estándar de Meta:
+---
+
+### 7.1. Explicación Detallada de cada Interruptor y Opción del Webhook
+
+Al hacer clic en **Editar** en una sesión y abrir la sección de **Webhooks**, encontrarás **8 opciones e interruptores configurables**:
+
+| Interruptor / Opción | ¿Qué hace internamente? | ¿Cuándo activarlo? | Recomendación |
+| :--- | :--- | :--- | :---: |
+| **1. Enviar Nuevos Mensajes** | Notifica al webhook cuando **tu propia API genera y envía un mensaje nuevo exitosamente** (`POST /v15.0/:phone/messages`), devolviendo una copia con su identificador único (`wamid...`). | Si tu base de datos o CRM necesita registrar la confirmación inmediata de los mensajes que tú mismo envías desde el sistema. | 🔵 **ON** |
+| **2. Enviar Mensajes de Grupos** | Reenvía al webhook los mensajes que ocurren dentro de **grupos de WhatsApp** donde tu número sea miembro. | **Apágalo** si el número está en grupos de trabajo/amigos y no quieres que tu bot se active en ellos. **Enciéndelo** solo si estás creando un bot grupal. | ⚪ **OFF** (para bots individuales) |
+| **3. Enviar Mensajes de Canales/Boletines** | Reenvía las publicaciones y noticias recibidas de los **Canales informativos de WhatsApp (Newsletters)** a los que estés suscrito. | Déjalo apagado a menos que estés construyendo un agregador o monitor de canales públicos. | ⚪ **OFF** |
+| **4. Enviar Mensajes Salientes** | Se dispara cuando **un humano responde o escribe directamente desde la aplicación de WhatsApp oficial en el celular físico o WhatsApp Web**. | **Muy recomendado:** Si tienes agentes humanos en el celular, permite que tu CRM guarde lo que el asesor le contestó al cliente y el chat quede completo. | 🔵 **ON** |
+| **5. Enviar Mensajes Entrantes** | **El interruptor más importante.** Se dispara cada vez que **un cliente te escribe un mensaje privado** (texto, audios, fotos, documentos PDF). | **Indispensable:** Es la vía principal para que tus bots, chatbots de IA o CRM se enteren de lo que los clientes te dicen. | 🔵 **ON (Obligatorio)** |
+| **6. Enviar Actualizaciones de Mensajes (Entregado/Leído)** | Envía notificaciones de cambio de estado de entrega de los mensajes (el doble check): `sent`, `delivered`, `read` (doble check azul), o `failed`. | Actívalo si en tu CRM o pantalla muestras las tildes grises/azules de lectura. Desactívalo si deseas ahorrar peticiones HTTP en tu servidor. | 🔵 **ON** o ⚪ **OFF** |
+| **7. Enviar Transcripción de Audio** | Si un cliente envía una **nota de voz**, Unoapi la procesa a través de un motor de transcripción de voz a texto (Google Speech o OpenAI Whisper) y envía el texto transcrito al webhook. | Actívalo si tienes configurada una clave de IA y quieres que tu bot pueda "leer" y responder a las notas de voz de los clientes. | ⚪ **OFF** (o 🔵 si usas Whisper) |
+| **8. Agregar a lista negra al enviar mensaje saliente por X seg (TTL)** | **Intervención Humana (Human Takeover):** Si un asesor humano responde manualmente desde el celular físico, Unoapi **pausa al bot para ese cliente específico durante X segundos** (ej: `300` seg = 5 min). | **Altamente recomendado:** Evita que el bot de IA interrumpa o se meta a responder mientras un agente humano está hablando con el cliente. | `300` seg (5 minutos) |
+
+---
+
+### 7.2. Configuración Recomendada por Tipo de Caso de Uso
+
+#### Caso A: Chatbot de Inteligencia Artificial / Asistente Virtual
+* **Enviar Mensajes Entrantes:** 🔵 ON
+* **Enviar Mensajes Salientes:** 🔵 ON
+* **Enviar Mensajes de Grupos:** ⚪ OFF *(Crucial para no responder en grupos)*
+* **Enviar Mensajes de Canales:** ⚪ OFF
+* **Agregar a lista negra (TTL):** `300` a `600` segundos *(Pausa al bot si interviene un humano)*
+
+#### Caso B: CRM Multiagente / Bandeja de Entrada Compartida
+* **Enviar Nuevos Mensajes:** 🔵 ON
+* **Enviar Mensajes Entrantes:** 🔵 ON
+* **Enviar Mensajes Salientes:** 🔵 ON
+* **Enviar Actualizaciones (Entregado/Leído):** 🔵 ON *(Para ver el doble check azul)*
+* **Enviar Mensajes de Grupos:** 🔵 ON o ⚪ OFF *(según si atienden grupos)*
+
+---
+
+### 7.3. Formato del Payload que enviará Unoapi a tu Webhook:
+
+Cuando un cliente te escribe, tu servidor recibe una petición `POST` con la estructura estándar oficial de Meta / WhatsApp Cloud API:
 
 ```json
 {
   "object": "whatsapp_business_account",
   "entry": [
     {
-      "id": "573208738309",
+      "id": "573204004097",
       "changes": [
         {
           "value": {
             "messaging_product": "whatsapp",
             "metadata": {
-              "display_phone_number": "573208738309",
-              "phone_number_id": "573208738309"
+              "display_phone_number": "573204004097",
+              "phone_number_id": "573204004097"
             },
             "contacts": [
               {
-                "profile": { "name": "Camilo Vargas" },
-                "wa_id": "573502299834"
+                "profile": { "name": "Carlos Gomez" },
+                "wa_id": "573001234567"
               }
             ],
             "messages": [
               {
-                "from": "573502299834",
-                "id": "3EB0AA52F4673BA3D85757",
+                "from": "573001234567",
+                "id": "wamid.HBgLMTY1MDUwNzY1MjAVAgARGBI5QTNDQTVCM0Q0Q0Q2RTY3RTcA",
                 "timestamp": "1791235402",
                 "text": {
                   "body": "Hola, quisiera consultar el catálogo de productos"
@@ -576,6 +620,15 @@ Cuando un cliente te escribe, tu servidor recibirá un `POST` con esta estructur
   ]
 }
 ```
+
+---
+
+### 7.4. Cómo Probar tu Webhook en 30 Segundos (Sin Programar)
+1. Abre **[webhook.site](https://webhook.site)** en tu navegador. Te generará una URL temporal única (ej: `https://webhook.site/xxxx-xxxx`).
+2. En tu panel de Unoapi, edita tu número y pega esa URL en el campo **URL Absoluta** del Webhook.
+3. Asegúrate de tener activo **Enviar Mensajes Entrantes**.
+4. Envía un mensaje desde cualquier teléfono al WhatsApp conectado.
+5. Verás aparecer inmediatamente en la pantalla de Webhook.site la tarjeta con el JSON completo del mensaje recibido en tiempo real.
 
 ---
 
@@ -673,3 +726,75 @@ Para manejar múltiples números de forma estable, rápida y económica, la mejo
    * Activa la opción `composingMessage` (simular escritura) para que el comportamiento imite a un humano.
 3. **¿Cómo hacer respaldo de las sesiones conectadas?**
    Toda la persistencia de las sesiones reside en el volumen de **Redis** y en las carpetas de datos. Haciendo un snapshot de tu VPS o un backup del volumen Docker de Redis, nunca perderás los números conectados.
+
+---
+
+## 10. Acceso con Usuario y Contraseña & Alertas de Desconexión por Correo
+
+### 10.1. Inicio de Sesión en el Panel Web
+
+Anteriormente el panel requería ingresar directamente el Token Bearer de la API. Ahora cuenta con un formulario moderno y seguro de **Usuario y Contraseña**:
+
+1. En tu archivo `.env`, define tus credenciales:
+   ```env
+   DASHBOARD_USERNAME=admin
+   DASHBOARD_PASSWORD=tu_clave_segura_aqui
+   ```
+2. Al ingresar a tu URL (ej: `https://wapp-services.appoio.site`), verás la tarjeta de inicio de sesión.
+3. Ingresa tu usuario y contraseña. El sistema validará tus credenciales y guardará automáticamente la sesión para que no tengas que escribirla en cada recarga.
+4. Si deseas cerrar sesión, haz clic en el ícono de engranaje (⚙️) en la barra superior y selecciona **Cerrar Sesión**.
+5. *(Opcional)* Si necesitas acceder directamente con un Token Bearer por propósitos de depuración técnica, puedes desplegar la opción **"O ingresar con Token de API"** en la parte inferior de la tarjeta.
+
+---
+
+### 10.2. Notificaciones por Correo ante Desconexión de Números
+
+Unoapi monitorea constantemente el estado del socket de WhatsApp (Baileys). Si un celular se desconecta (por ejemplo, porque cerraron la sesión desde el WhatsApp del teléfono, porque se conectó en otro navegador, o por una caída permanente de red), el sistema enviará inmediatamente un correo de alerta a las direcciones que configures.
+
+#### Paso 1: Configurar el Servidor SMTP en tu archivo `.env`
+
+Agrega las siguientes variables en tu archivo `.env`:
+
+```env
+# Configuración SMTP (Ejemplo con Gmail)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=tu_correo@gmail.com
+SMTP_PASS=xxxx xxxx xxxx xxxx     # Contraseña de aplicación de 16 caracteres de Google
+SMTP_FROM=Unoapi Alertas <tu_correo@gmail.com>
+SMTP_SECURE=false
+
+# Opcional: Correos de alerta por defecto (si un número no tiene configurados individualmente)
+ALERT_EMAILS=administrador@empresa.com
+```
+
+> [!TIP]
+> **¿Cómo generar una contraseña de aplicación en Gmail?**
+> 1. Entra a tu Cuenta de Google -> **Seguridad**.
+> 2. Activa la **Verificación en 2 pasos** si aún no la tienes.
+> 3. Busca en la barra superior de tu cuenta de Google **"Contraseñas de aplicaciones"**.
+> 4. Crea una nueva con el nombre `Unoapi` y copia la clave generada de 16 letras en la variable `SMTP_PASS`.
+
+#### Paso 2: Asignar los Correos de Notificación por Número en el Panel
+
+Puedes asignar destinatarios distintos según el número (por ejemplo, notificar al equipo de Ventas si se cae el número de ventas, o al equipo de Soporte si se cae el de soporte):
+
+1. En la tabla principal de sesiones, haz clic en el botón de **Editar (ícono de lápiz)** del número deseado.
+2. Desplázate hacia abajo hasta la sección **"Alertas de Desconexión por Correo"**.
+3. En el campo **"Correos de notificación (separados por coma)"**, ingresa las direcciones:
+   ```text
+   gerencia@empresa.com, soporte@empresa.com, comercial@empresa.com
+   ```
+4. Haz clic en el botón **"Probar Envío"** para enviar un correo de prueba de inmediato y comprobar que la configuración SMTP funcione correctamente.
+5. Haz clic en **Guardar Cambios**.
+
+#### Paso 3: ¿Qué contiene el Correo de Alerta?
+
+Cuando un número pierde la conexión, los destinatarios recibirán un correo con:
+* ⚠️ **Alerta en Rojo:** Número de WhatsApp desconectado y Nombre/Identificación asignada.
+* 📋 **Motivo de la Desconexión:** Explica claramente la causa (ej: *Sesión cerrada desde el celular*, *Conexión reemplazada en otro dispositivo*, o *Error de conexión a internet*).
+* 🕒 **Fecha y Hora Exacta** de la desconexión.
+* 🔘 **Botón Directo "Reconectar Número":** Al hacer clic, abre de inmediato el panel web para escanear el nuevo código QR.
+* ⏳ **Ventana de Gracia Inteligente (10 segundos):** Si la conexión cae por un corte intermitente de internet o parpadeo de red y se restablece en menos de 10 segundos, Unoapi descarta automáticamente la alerta y no envía ningún correo innecesario. Solo si el número permanece desconectado tras 10 segundos se dispara la notificación.
+* 🛡️ **Filtro Anti-Spam (Debounce de 5 minutos):** Si un teléfono permanece desconectado o falla repetidamente, Unoapi respetará un intervalo mínimo de 5 minutos entre alertas por número para evitar saturar tu bandeja de entrada.
+

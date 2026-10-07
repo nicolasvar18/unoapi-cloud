@@ -519,3 +519,23 @@ export const setKey = async (phone: string, id: string, value: any) => {
   const string = JSON.stringify(value)
   return redisSetAndExpire(key, string, DATA_TTL)
 }
+
+export const getGlobalSmtpConfig = async () => {
+  const key = `${BASE_KEY}global-smtp`
+  const data = await redisGet(key)
+  if (data) {
+    try {
+      return JSON.parse(data)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const setGlobalSmtpConfig = async (config: any) => {
+  const key = `${BASE_KEY}global-smtp`
+  await redisSet(key, JSON.stringify(config))
+  return config
+}

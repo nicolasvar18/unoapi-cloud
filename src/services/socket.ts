@@ -28,6 +28,7 @@ import { Level } from 'pino'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import { useVoiceCallsBaileys } from 'voice-calls-baileys/lib/services/transport.model'
+import { emailNotifier } from './email_notifier'
 import {
   DEFAULT_BROWSER,
   CONNECTING_TIMEOUT_MS,
@@ -293,11 +294,13 @@ export const connect = async ({
         const message = t('removed')
         await onNotification(message, true)
       }
+      emailNotifier.notifyDisconnection(phone, 'Dispositivo desvinculado o sesión cerrada desde WhatsApp').catch(() => {})
       await logout()
       return onDisconnected(phone, payload)
     } else if (statusCode === DisconnectReason.connectionReplaced) {
       await close()
       const message = t('unique')
+      emailNotifier.notifyDisconnection(phone, 'Conexión reemplazada por otra sesión activa').catch(() => {})
       return onNotification(message, true)
     } else if (statusCode === DisconnectReason.restartRequired) {
       const message = t('restart')
@@ -335,6 +338,7 @@ export const connect = async ({
       const message = t('attempts_exceeded', attempts)
       await onNotification(message, true)
       status.attempt = 1
+      emailNotifier.notifyDisconnection(phone, `Intentos de reconexión agotados (${attempts})`).catch(() => {})
       return close()
     } else {
       const message = t('connecting_attemps', status.attempt, attempts)
