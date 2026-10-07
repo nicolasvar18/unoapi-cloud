@@ -7,6 +7,7 @@ import {
   delAuth,
   setMessage,
   getMessage,
+  findMessageById,
   setJid,
   getJid,
   getKey,
@@ -93,22 +94,44 @@ const dataStoreRedis = async (phone: string, config: Config): Promise<DataStore>
     await setJid(phone, phoneOrJid, jid)
   }
   store.loadMessage = async (remoteJid: string, id: string) => {
-    const clientPhone = jidToPhoneNumber(remoteJid)
+    if (!id) return undefined
+    const clientPhone = remoteJid ? jidToPhoneNumber(remoteJid) : ''
     let m
-    m = await getMessage(phone, clientPhone, id)
-    if (!m) {
+    if (clientPhone) {
+      m = await getMessage(phone, clientPhone, id)
+    }
+    if (!m && remoteJid) {
+      m = await getMessage(phone, remoteJid, id)
+    }
+    if (!m && remoteJid) {
+      const cleanPhone = jidToPhoneNumber(remoteJid, '')
+      if (cleanPhone && cleanPhone !== clientPhone) {
+        m = await getMessage(phone, cleanPhone, id)
+      }
+    }
+    if (!m && remoteJid) {
       const newJid = isIndividualJid(remoteJid) ? phoneNumberToJid(jidToPhoneNumber(remoteJid)) : remoteJid
-      m = await getMessage(phone, newJid, id)
+      if (newJid !== remoteJid && newJid !== clientPhone) {
+        m = await getMessage(phone, newJid, id)
+      }
+    }
+    // Fallback: búsqueda por ID único en Redis si los formatos de JID difieren
+    if (!m) {
+      m = await findMessageById(phone, id)
     }
     if (!m) {
-      return
+      return undefined
     }
     return m as proto.IWebMessageInfo
   }
   store.setMessage = async (remoteJid: string, message: WAMessage) => {
-    const clientPhone = jidToPhoneNumber(remoteJid);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return setMessage(phone, clientPhone, message.key.id!, message)
+    const clientPhone = jidToPhoneNumber(remoteJid)
+    const msgId = message?.key?.id
+    if (!msgId) return
+    await setMessage(phone, clientPhone, msgId, message)
+    if (remoteJid && remoteJid !== clientPhone) {
+      await setMessage(phone, remoteJid, msgId, message)
+    }
   }
   store.cleanSession = async (removeConfig = CLEAN_CONFIG_ON_DISCONNECT) => {
     if (removeConfig) {

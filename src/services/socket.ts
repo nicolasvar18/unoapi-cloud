@@ -27,6 +27,7 @@ import logger from './logger'
 import { Level } from 'pino'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import { HttpsProxyAgent } from 'https-proxy-agent'
+import NodeCache from 'node-cache'
 import { useVoiceCallsBaileys } from 'voice-calls-baileys/lib/services/transport.model'
 import { emailNotifier } from './email_notifier'
 import {
@@ -320,11 +321,16 @@ export const connect = async ({
   }
 
   const getMessage = async (key: proto.IMessageKey): Promise<proto.IMessage | undefined> => {
-    const { remoteJid, id } = key
-    logger.debug('load message for jid %s id %s', remoteJid, id)
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const message = await dataStore.loadMessage(remoteJid!, id!)
-    return message?.message || undefined
+    if (!key || !key.id) return undefined
+    const remoteJid = key.remoteJid || (key as any).participant || ''
+    logger.debug('load message for jid %s id %s', remoteJid, key.id)
+    const stored = await dataStore.loadMessage(remoteJid, key.id)
+    if (!stored) {
+      logger.debug('Message not found in dataStore for %s id %s', remoteJid, key.id)
+      return undefined
+    }
+    const msg = (stored as any)?.message || stored
+    return msg as proto.IMessage
   }
 
   const event = <T extends keyof BaileysEventMap>(event: T, callback: (arg: BaileysEventMap[T]) => void) => {
@@ -526,6 +532,11 @@ export const connect = async ({
       agent = new SocksProxyAgent(config.proxyUrl)
       fetchAgent = new HttpsProxyAgent(config.proxyUrl)
     }
+    const sentMessagesCache = new NodeCache({
+      stdTTL: 1800, // 30 minutos de caché para reintentos inmediatos (en vez de los 20 segundos por defecto de Baileys)
+      useClones: false
+    })
+
     const socketConfig: UserFacingSocketConfig = {
       auth: state,
       logger: loggerBaileys,
@@ -534,6 +545,7 @@ export const connect = async ({
       shouldIgnoreJid: config.shouldIgnoreJid,
       retryRequestDelayMs: config.retryRequestDelayMs,
       msgRetryCounterMap,
+      sentMessagesCache,
       // patchMessageBeforeSending,
       agent,
       fetchAgent,

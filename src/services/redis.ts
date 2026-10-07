@@ -416,6 +416,22 @@ export const getMessage = async <T>(phone: string, jid: string, id: string): Pro
   }
 }
 
+export const findMessageById = async <T>(phone: string, id: string): Promise<T | undefined> => {
+  try {
+    const pattern = messageKey(phone, '*', id)
+    const keys = await redisKeys(pattern)
+    if (keys && keys.length > 0) {
+      const string = await redisGet(keys[0])
+      if (string) {
+        return JSON.parse(string) as T
+      }
+    }
+  } catch (err: any) {
+    logger.error('Error finding message by ID in Redis for phone %s id %s: %s', phone, id, err?.message)
+  }
+  return undefined
+}
+
 export const getConnectCount = async (phone: string) => {
   const keyPattern = connectCountKey(phone, '*')
   const keys = await redisKeys(keyPattern)
