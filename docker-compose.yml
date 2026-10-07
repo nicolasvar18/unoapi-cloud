@@ -48,7 +48,7 @@ services:
     restart: on-failure
     entrypoint: sh -c 'wait-for redis:6379 rabbitmq:5672 -- yarn web-dev'
     ports:
-      - 9876:9876
+      - 127.0.0.1:9876:9876
     depends_on:
       - worker
 
@@ -67,8 +67,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     ports:
-      - 5672:5672
-      - 15672:15672
+      - 127.0.0.1:5672:5672
+      - 127.0.0.1:15672:15672
     volumes:
       - rabbitmq:/var/lib/rabbitmq
 
@@ -87,7 +87,7 @@ services:
     volumes:
       - insight:/data
     ports:
-      - 5540:5540
+      - 127.0.0.1:5540:5540
     environment:
       RI_LOG_LEVEL: debug
       RIAUTHPROMPT: 5
@@ -99,8 +99,8 @@ services:
     <<: *minio
     restart: on-failure
     ports:
-      - 9001:9001
-      - 9000:9000
+      - 127.0.0.1:9001:9001
+      - 127.0.0.1:9000:9000
     volumes:
       - minio:/data
     entrypoint: |
