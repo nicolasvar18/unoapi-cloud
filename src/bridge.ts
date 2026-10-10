@@ -87,7 +87,6 @@ process.on('unhandledRejection', (reason: any, promise) => {
   if (process.env.SENTRY_DSN) {
     Sentry.captureException(reason)
   }
-  logger.error('unhandledRejection: %s', reason.stack)
+  logger.error('unhandledRejection bridge: %s', reason?.stack || reason)
   logger.error('promise: %s', promise)
-  process.exit(1)
 })

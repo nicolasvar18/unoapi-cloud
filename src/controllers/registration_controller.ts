@@ -1,9 +1,10 @@
 import { Request, Response } from 'express'
 import { getConfig } from '../services/config'
-import { setConfig } from '../services/redis'
+import { setConfig, delSession } from '../services/redis'
 import logger from '../services/logger'
 import { Logout } from '../services/logout'
 import { Reload } from '../services/reload'
+import { emailNotifier } from '../services/email_notifier'
 
 export class RegistrationController {
   private getConfig: getConfig
@@ -30,8 +31,8 @@ export class RegistrationController {
       this.reload.run(phone)
       const config = await this.getConfig(phone)
       return res.status(200).json(config)
-    } catch (e) {
-      return res.status(400).json({ status: 'error', message: `${phone} could not create, error: ${e.message}` })
+    } catch (e: any) {
+      return res.status(400).json({ status: 'error', message: `${phone} could not create, error: ${e?.message}` })
     }
   }
 
@@ -42,7 +43,13 @@ export class RegistrationController {
     logger.debug('deregister body %s', JSON.stringify(req.body))
     logger.debug('deregister query %s', JSON.stringify(req.query))
     const { phone } = req.params
-    await this.logout.run(phone)
+    try {
+      await this.logout.run(phone)
+    } catch (e: any) {
+      logger.warn('Error during logout.run for %s: %s', phone, e?.message)
+    }
+    emailNotifier.cancelPendingAlert(phone)
+    await delSession(phone)
     return res.status(204).send()
   }
 }

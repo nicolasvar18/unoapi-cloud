@@ -333,6 +333,7 @@ export const setConfig = async (phone: string, value: any) => {
 
 export const delConfig = async (phone: string) => {
   const key = configKey(phone)
+  configs.delete(phone)
   await redisDel(key)
 }
 
@@ -441,7 +442,7 @@ export const getConnectCount = async (phone: string) => {
 export const clearConnectCount = async (phone: string) => {
   const keyPattern = connectCountKey(phone, '*')
   const keys = await redisKeys(keyPattern)
-  for (let index = 0; index < keys.length.length; index++) {
+  for (let index = 0; index < keys.length; index++) {
     const key = keys[index]
     await redisDel(key)
   }
@@ -569,5 +570,27 @@ export const getLatestQr = async (phone: string): Promise<string | null> => {
 export const clearLatestQr = async (phone: string) => {
   const key = `${BASE_KEY}qrcode:${phone}`
   return redisDel(key)
+}
+
+export const delSession = async (phone: string) => {
+  logger.info('delSession: Purging all Redis session data for phone %s', phone)
+  try {
+    configs.delete(phone)
+    await delConfig(phone)
+    await delAuth(phone)
+    await redisDel(sessionStatusKey(phone))
+    await clearLatestQr(phone)
+    await clearConnectCount(phone)
+    await redisDel(templateKey(phone))
+
+    const pattern = `${BASE_KEY}*${phone}*`
+    const keys = await redisKeys(pattern)
+    for (const key of keys) {
+      await redisDel(key)
+    }
+    logger.info('delSession: Successfully purged all Redis data for phone %s', phone)
+  } catch (err: any) {
+    logger.error('Error during delSession for phone %s: %s', phone, err?.message)
+  }
 }
 

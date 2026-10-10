@@ -1157,7 +1157,7 @@
                         if (!response.ok) throw new Error("Error en la solicitud.");
                     })
                     .then(_ => {
-                        alert("¡La sesión fue eliminada! Recarga la página para actualizar la lista.");
+                        alert("¡La sesión fue eliminada exitosamente!");
                         fetchSessions(token, true);
                     })
                     .catch(error => alert(error.message));

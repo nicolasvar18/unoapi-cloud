@@ -365,8 +365,10 @@ export const amqpConsume = async (
   const bindingKeyDelayed = await bindQueue(channel, exchange, queue, routingKey, true)
 
   channel?.on('close', () => {
-    channel.unbindQueue(queue, exchange, bindingKey)
-    channel.unbindQueue(queue, exchange, bindingKeyDelayed)
+    try {
+      channel?.unbindQueue(queue, exchange, bindingKey)?.catch?.(() => {})
+      channel?.unbindQueue(queue, exchange, bindingKeyDelayed)?.catch?.(() => {})
+    } catch (_) {}
   })
   if (!consumers.get(queue)) {
     consumers.set(queue, true)
