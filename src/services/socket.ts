@@ -187,6 +187,7 @@ export const connect = async ({
   let currentSaveCreds = firstSaveCreds
   const verifyAndSaveCreds = async () => currentSaveCreds()
   let connectingTimeout
+  let presenceInterval: NodeJS.Timeout | null = null
 
   const status: Status = {
     attempt: time,
@@ -276,6 +277,17 @@ export const connect = async ({
     await onNotification(message, false)
     if (!config.markOnlineOnConnect) {
       await sock?.sendPresenceUpdate('unavailable')?.catch(() => {})
+      if (presenceInterval) {
+        clearInterval(presenceInterval)
+      }
+      presenceInterval = setInterval(async () => {
+        try {
+          if (sock && (await sessionStore.isStatusOnline(phone))) {
+            logger.debug('Periodic presence heartbeat unavailable sent for %s', phone)
+            await sock.sendPresenceUpdate('unavailable').catch(() => {})
+          }
+        } catch (_) {}
+      }, 5 * 60 * 1000)
     }
   }
 
@@ -361,6 +373,10 @@ export const connect = async ({
 
   const close = async () => {
     logger.info(`${phone} close`)
+    if (presenceInterval) {
+      clearInterval(presenceInterval)
+      presenceInterval = null
+    }
     EVENTS.forEach((e: any) => {
       try {
         sock?.ev?.removeAllListeners(e)
@@ -395,6 +411,10 @@ export const connect = async ({
 
   const logout = async () => {
     logger.info(`${phone} logout`)
+    if (presenceInterval) {
+      clearInterval(presenceInterval)
+      presenceInterval = null
+    }
     try {
       return sock && (await sock.logout())
     } catch (error) {
@@ -474,7 +494,11 @@ export const connect = async ({
         opts['font'] = 2
       }
       logger.debug('Send baileys from %s to %s -> %s with options %s', phone, id, JSON.stringify(message), JSON.stringify(opts))
-      return sock?.sendMessage(id, message, opts)
+      const sent = await sock?.sendMessage(id, message, opts)
+      if (!config.markOnlineOnConnect) {
+        sock?.sendPresenceUpdate('unavailable')?.catch(() => {})
+      }
+      return sent
     }
     if (!isValidPhoneNumber(to)) {
       throw new SendError(7, t('invalid_phone_number', to))
