@@ -105,6 +105,7 @@ export type Config = {
   openaiApiSpeechModel: string | undefined
   openaiBaseUrl: string | undefined
   alertEmails: string | undefined
+  markOnlineOnConnect: boolean | undefined
 }
 
 export const defaultConfig: Config = {
@@ -180,7 +181,8 @@ export const defaultConfig: Config = {
   openaiApiSpeechVoice: undefined,
   openaiApiSpeechModel: undefined,
   openaiBaseUrl: undefined,
-  alertEmails: undefined
+  alertEmails: undefined,
+  markOnlineOnConnect: false
 }
 
 export interface getConfig {

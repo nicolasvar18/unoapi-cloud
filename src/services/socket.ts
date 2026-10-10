@@ -274,6 +274,9 @@ export const connect = async ({
 
     const message = t('connected', phone, sock?.user?.id!, whatsappVersion ? whatsappVersion.join('.') : 'auto', version.join('.'), new Date().toUTCString())
     await onNotification(message, false)
+    if (!config.markOnlineOnConnect) {
+      await sock?.sendPresenceUpdate('unavailable')?.catch(() => {})
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -563,7 +566,8 @@ export const connect = async ({
       agent,
       fetchAgent,
       qrTimeout: config.qrTimeoutMs,
-      shouldResendMessageOn475AckError: true
+      shouldResendMessageOn475AckError: true,
+      markOnlineOnConnect: config.markOnlineOnConnect !== undefined ? config.markOnlineOnConnect : false,
     }
     if (whatsappVersion) {
       socketConfig.version = whatsappVersion
