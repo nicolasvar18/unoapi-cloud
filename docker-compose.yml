@@ -31,6 +31,7 @@ x-base: &base
     SMTP_FROM: ${SMTP_FROM:-}
     SMTP_SECURE: ${SMTP_SECURE:-false}
     ALERT_EMAILS: ${ALERT_EMAILS:-}
+    SEND_MESSAGE_ON_DECRYPT_ERROR: ${SEND_MESSAGE_ON_DECRYPT_ERROR:-false}
 
 x-minio: &minio
   image: elestio/minio:latest

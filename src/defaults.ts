@@ -138,7 +138,7 @@ export const IGNORE_NEWSLETTER_MESSAGES: boolean =
 export const IGNORE_OWN_MESSAGES_DECRYPT_ERROR: boolean =
   process.env.IGNORE_OWN_MESSAGES_DECRYPT_ERROR === _undefined ? false : process.env.IGNORE_OWN_MESSAGES_DECRYPT_ERROR == 'true'
 export const SEND_MESSAGE_ON_DECRYPT_ERROR: boolean =
-  process.env.SEND_MESSAGE_ON_DECRYPT_ERROR === _undefined ? true : process.env.SEND_MESSAGE_ON_DECRYPT_ERROR == 'true'
+  process.env.SEND_MESSAGE_ON_DECRYPT_ERROR === _undefined ? false : process.env.SEND_MESSAGE_ON_DECRYPT_ERROR == 'true'
 export const IGNORE_BROADCAST_STATUSES: boolean =
   process.env.IGNORE_BROADCAST_STATUSES === _undefined ? true : process.env.IGNORE_BROADCAST_STATUSES == 'true'
 export const READ_ON_RECEIPT: boolean = process.env.READ_ON_RECEIPT === _undefined ? false : process.env.READ_ON_RECEIPT == 'true'
