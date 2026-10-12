@@ -49,10 +49,19 @@ export const authState = async (session: session, phone: string) => {
     },
   }
 
-  const evictSessionCache = (targetIdentifier: string) => {
+  const evictSessionCache = (targetIdentifier?: string) => {
     try {
-      const clean = targetIdentifier.replace(/[^0-9]/g, '')
       const cachedKeys = signalKeyCache.keys()
+      if (!targetIdentifier || targetIdentifier === 'all') {
+        for (const k of cachedKeys) {
+          if (k.startsWith('session.')) {
+            signalKeyCache.del(k)
+          }
+        }
+        return
+      }
+
+      const clean = targetIdentifier.replace(/[^0-9]/g, '')
       for (const k of cachedKeys) {
         if (k.startsWith('session.') && (k.includes(targetIdentifier) || (clean && k.includes(clean)))) {
           signalKeyCache.del(k)

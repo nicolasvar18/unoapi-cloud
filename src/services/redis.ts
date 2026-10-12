@@ -594,17 +594,25 @@ export const delSession = async (phone: string) => {
   }
 }
 
-export const clearContactSession = async (phone: string, targetIdentifier: string) => {
-  if (!phone || !targetIdentifier) return
-  const cleanPhone = phone.replace(/[^0-9]/g, '')
-  const cleanTarget = targetIdentifier.replace(/[^0-9]/g, '')
-  // Safety guard: never delete the bot's own session keys!
-  if (cleanTarget && cleanPhone === cleanTarget) {
-    logger.debug('clearContactSession: Skipped bot own number %s', phone)
-    return
-  }
+export const clearContactSession = async (phone: string, targetIdentifier?: string) => {
+  if (!phone) return
 
   try {
+    if (!targetIdentifier || targetIdentifier === 'all') {
+      const pattern = `${BASE_KEY}auth:${phone}:session-*`
+      const keys = await redisKeys(pattern)
+      if (keys?.length) {
+        logger.info('clearContactSession: Deleting all %d session keys for bot %s', keys.length, phone)
+        for (const key of keys) {
+          await redisDel(key)
+        }
+      }
+      return
+    }
+
+    const cleanPhone = phone.replace(/[^0-9]/g, '')
+    const cleanTarget = targetIdentifier.replace(/[^0-9]/g, '')
+
     const identifiers = [targetIdentifier]
     if (cleanTarget && cleanTarget !== targetIdentifier) {
       identifiers.push(cleanTarget)
@@ -618,14 +626,14 @@ export const clearContactSession = async (phone: string, targetIdentifier: strin
       const pattern = `${BASE_KEY}auth:${phone}:session-*${id}*`
       const keys = await redisKeys(pattern)
       if (keys?.length) {
-        logger.info('clearContactSession: Deleting %d stale session keys for bot %s contact %s (matched id %s)', keys.length, phone, targetIdentifier, id)
+        logger.info('clearContactSession: Deleting %d stale session keys for bot %s target %s (matched id %s)', keys.length, phone, targetIdentifier, id)
         for (const key of keys) {
           await redisDel(key)
         }
       }
     }
   } catch (err: any) {
-    logger.error('Error in clearContactSession for phone %s contact %s: %s', phone, targetIdentifier, err?.message)
+    logger.error('Error in clearContactSession for phone %s target %s: %s', phone, targetIdentifier, err?.message)
   }
 }
 

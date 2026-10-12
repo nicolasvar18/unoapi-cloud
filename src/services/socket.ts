@@ -345,6 +345,11 @@ export const connect = async ({
       clearContactSession(phone, remoteJid).catch(() => {})
       store.evictSessionCache?.(remoteJid)
     }
+    const participant = (key as any)?.participant
+    if (participant && participant !== remoteJid) {
+      clearContactSession(phone, participant).catch(() => {})
+      store.evictSessionCache?.(participant)
+    }
     const stored = await dataStore.loadMessage(remoteJid, key.id)
     if (!stored) {
       logger.debug('Message not found in dataStore for %s id %s', remoteJid, key.id)
@@ -677,7 +682,9 @@ export const connect = async ({
 
               const candidates = [from, participant, recipient]
               if (msgId) {
-                const stored = await dataStore.loadMessage(from || recipient, msgId).catch(() => undefined)
+                const key = await dataStore.loadKey?.(msgId).catch(() => undefined)
+                if (key?.remoteJid) candidates.push(key.remoteJid)
+                const stored = await dataStore.loadMessage(key?.remoteJid || from || recipient, msgId).catch(() => undefined)
                 const storedRemote = stored?.key?.remoteJid
                 if (storedRemote) candidates.push(storedRemote)
               }
