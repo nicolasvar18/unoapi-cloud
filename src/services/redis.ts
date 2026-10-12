@@ -594,3 +594,39 @@ export const delSession = async (phone: string) => {
   }
 }
 
+export const clearContactSession = async (phone: string, targetIdentifier: string) => {
+  if (!phone || !targetIdentifier) return
+  const cleanPhone = phone.replace(/[^0-9]/g, '')
+  const cleanTarget = targetIdentifier.replace(/[^0-9]/g, '')
+  // Safety guard: never delete the bot's own session keys!
+  if (cleanTarget && cleanPhone === cleanTarget) {
+    logger.debug('clearContactSession: Skipped bot own number %s', phone)
+    return
+  }
+
+  try {
+    const identifiers = [targetIdentifier]
+    if (cleanTarget && cleanTarget !== targetIdentifier) {
+      identifiers.push(cleanTarget)
+    }
+    const targetNoDomain = targetIdentifier.split('@')[0].split(':')[0]
+    if (targetNoDomain && !identifiers.includes(targetNoDomain)) {
+      identifiers.push(targetNoDomain)
+    }
+
+    for (const id of identifiers) {
+      const pattern = `${BASE_KEY}auth:${phone}:session-*${id}*`
+      const keys = await redisKeys(pattern)
+      if (keys?.length) {
+        logger.info('clearContactSession: Deleting %d stale session keys for bot %s contact %s (matched id %s)', keys.length, phone, targetIdentifier, id)
+        for (const key of keys) {
+          await redisDel(key)
+        }
+      }
+    }
+  } catch (err: any) {
+    logger.error('Error in clearContactSession for phone %s contact %s: %s', phone, targetIdentifier, err?.message)
+  }
+}
+
+

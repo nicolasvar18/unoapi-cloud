@@ -41,7 +41,7 @@ const storeFile: store = async (phone: string, config: Config): Promise<Store> =
   const mediaDir = `${MEDIA_DIR}/${phone}`
   logger.info(`Store session in directory: ${sessionDir}`)
   logger.info(`Store medias in directory: ${mediaDir}`)
-  const { state, saveCreds }: { state: AuthenticationState; saveCreds: () => Promise<void> } = await authState(sessionFile, sessionDir)
+  const { state, saveCreds, evictSessionCache } = await authState(sessionFile, sessionDir)
   const dataStore: DataStore = await getDataStoreFile(phone, config)
   let mediaStore: MediaStore
   if (config.useS3) {
@@ -87,5 +87,5 @@ const storeFile: store = async (phone: string, config: Config): Promise<Store> =
     logger.info('Store data not save')
   }
   const sessionStore = new SessionStoreFile()
-  return { state, saveCreds, dataStore, mediaStore, sessionStore }
+  return { state, saveCreds, dataStore, mediaStore, sessionStore, evictSessionCache }
 }

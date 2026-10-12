@@ -16,6 +16,7 @@ export type Store = {
   state: AuthenticationState
   saveCreds: () => Promise<void>
   mediaStore: MediaStore
+  evictSessionCache?: (target: string) => void
 }
 
 export interface store {

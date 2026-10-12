@@ -30,7 +30,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import NodeCache from 'node-cache'
 import { useVoiceCallsBaileys } from 'voice-calls-baileys/lib/services/transport.model'
 import { emailNotifier } from './email_notifier'
-import { clearLatestQr } from './redis'
+import { clearLatestQr, clearContactSession } from './redis'
 import {
   DEFAULT_BROWSER,
   CONNECTING_TIMEOUT_MS,
@@ -341,6 +341,10 @@ export const connect = async ({
     if (!key || !key.id) return undefined
     const remoteJid = key.remoteJid || (key as any).participant || ''
     logger.debug('load message for jid %s id %s', remoteJid, key.id)
+    if (remoteJid) {
+      clearContactSession(phone, remoteJid).catch(() => {})
+      store.evictSessionCache?.(remoteJid)
+    }
     const stored = await dataStore.loadMessage(remoteJid, key.id)
     if (!stored) {
       logger.debug('Message not found in dataStore for %s id %s', remoteJid, key.id)
@@ -650,6 +654,48 @@ export const connect = async ({
           }
         }
       })
+
+      // Intercept retry receipt stanzas to immediately purge stale contact sessions
+      try {
+        const wsAny = sock.ws as any
+        wsAny?.prependListener?.('CB:receipt', async (node: any) => {
+          try {
+            const attrs = node?.attrs
+            if (attrs?.type === 'retry') {
+              const msgId = attrs.id || ''
+              const participant = attrs.participant || ''
+              const from = attrs.from || ''
+              const recipient = attrs.recipient || ''
+              logger.warn(
+                'Retry receipt detected on %s for msg %s from %s (participant %s, recipient %s). Invalidating stale session...',
+                phone,
+                msgId,
+                from,
+                participant,
+                recipient,
+              )
+
+              const candidates = [from, participant, recipient]
+              if (msgId) {
+                const stored = await dataStore.loadMessage(from || recipient, msgId).catch(() => undefined)
+                const storedRemote = stored?.key?.remoteJid
+                if (storedRemote) candidates.push(storedRemote)
+              }
+
+              for (const c of candidates) {
+                if (c) {
+                  await clearContactSession(phone, c).catch(() => {})
+                  store.evictSessionCache?.(c)
+                }
+              }
+            }
+          } catch (err: any) {
+            logger.error('Error in CB:receipt retry listener for %s: %s', phone, err?.message)
+          }
+        })
+      } catch (err: any) {
+        logger.error('Error attaching CB:receipt listener for %s: %s', phone, err?.message)
+      }
       logger.info('Connection type %s already creds %s', config.connectionType, sock?.authState?.creds?.registered)
       if (config.connectionType == 'pairing_code' && !sock?.authState?.creds?.registered) {
         logger.info(`Requesting pairing code ${phone}`)

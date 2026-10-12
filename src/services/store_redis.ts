@@ -25,7 +25,7 @@ export const getStoreRedis: getStore = async (phone: string, config: Config): Pr
 
 const storeRedis: store = async (phone: string, config: Config): Promise<Store> => {
   logger.info(`Store session: ${phone}`)
-  const { state, saveCreds }: { state: AuthenticationState; saveCreds: () => Promise<void> } = await authState(sessionRedis, phone)
+  const { state, saveCreds, evictSessionCache } = await authState(sessionRedis, phone)
   const dataStore: DataStore = await getDataStoreRedis(phone, config)
   let mediaStore: MediaStore
   if (config.useS3) {
@@ -37,5 +37,5 @@ const storeRedis: store = async (phone: string, config: Config): Promise<Store> 
   }
   logger.info(`Store data in redis`)
   const sessionStore = new SessionStoreRedis()
-  return { state, saveCreds, dataStore, mediaStore, sessionStore }
+  return { state, saveCreds, dataStore, mediaStore, sessionStore, evictSessionCache }
 }
