@@ -1,59 +1,78 @@
 const fs = require('fs')
 const path = require('path')
 
-const targetFile = path.resolve(__dirname, '../node_modules/baileys/lib/Socket/messages-send.js')
+function patchFile(filePath, patches) {
+  if (!fs.existsSync(filePath)) {
+    console.log('[patch-baileys] File not found:', filePath)
+    return
+  }
 
-if (!fs.existsSync(targetFile)) {
-  console.log('[patch-baileys] Target file not found:', targetFile)
-  process.exit(0)
+  let content = fs.readFileSync(filePath, 'utf8')
+  let fileModified = false
+
+  for (const { name, target, replacement } of patches) {
+    if (content.includes(target)) {
+      content = content.replace(target, replacement)
+      fileModified = true
+      console.log(`[patch-baileys] Applied: ${name}`)
+    } else {
+      console.log(`[patch-baileys] Already applied or pattern not matched: ${name}`)
+    }
+  }
+
+  if (fileModified) {
+    fs.writeFileSync(filePath, content, 'utf8')
+    console.log(`[patch-baileys] Saved changes to ${filePath}`)
+  }
 }
 
-let content = fs.readFileSync(targetFile, 'utf8')
-let modified = false
+const messagesSendFile = path.resolve(__dirname, '../node_modules/baileys/lib/Socket/messages-send.js')
+const messagesRecvFile = path.resolve(__dirname, '../node_modules/baileys/lib/Socket/messages-recv.js')
 
-// Patch 1: Add meLidUser definition
-const target1 = 'const meUser = (_a = (0, WABinary_1.jidDecode)(meId)) === null || _a === void 0 ? void 0 : _a.user;\n                const encodedMeMsg ='
-const replace1 = 'const meUser = (_a = (0, WABinary_1.jidDecode)(meId)) === null || _a === void 0 ? void 0 : _a.user;\n                const meLidUser = (_b = (0, WABinary_1.jidDecode)((_a = authState.creds.me) === null || _a === void 0 ? void 0 : _a.lid)) === null || _b === void 0 ? void 0 : _b.user;\n                const encodedMeMsg ='
+patchFile(messagesSendFile, [
+  {
+    name: 'messages-send: define meLidUser',
+    target: 'const meUser = (_a = (0, WABinary_1.jidDecode)(meId)) === null || _a === void 0 ? void 0 : _a.user;\n                const encodedMeMsg =',
+    replacement: 'const meUser = (_a = (0, WABinary_1.jidDecode)(meId)) === null || _a === void 0 ? void 0 : _a.user;\n                const meLidUser = (_b = (0, WABinary_1.jidDecode)((_a = authState.creds.me) === null || _a === void 0 ? void 0 : _a.lid)) === null || _b === void 0 ? void 0 : _b.user;\n                const encodedMeMsg ='
+  },
+  {
+    name: 'messages-send: isMe accounts for LID',
+    target: 'const isMe = user === meUser;\n                    const encodedLid =',
+    replacement: 'const isMe = user === meUser || (Boolean(meLidUser) && user === meLidUser);\n                    const encodedLid ='
+  },
+  {
+    name: 'messages-send: ensure primary phone LID is included in meIds',
+    target: 'allIds.push(encodedLid);\n                }\n                await assertSessions(allIds, false);',
+    replacement: `allIds.push(encodedLid);
+                }
+                if (meLidUser) {
+                    const primaryLid = (0, WABinary_1.jidEncode)(meLidUser, "lid", 0);
+                    if (!meIds.includes(primaryLid)) {
+                        meIds.push(primaryLid);
+                    }
+                    if (!allIds.includes(primaryLid)) {
+                        allIds.push(primaryLid);
+                    }
+                }
+                await assertSessions(allIds, false);`
+  },
+  {
+    name: 'messages-send: retry resend isMe accounts for LID',
+    target: 'const isMe = (0, WABinary_1.areJidsSameUser)(participant.jid, meId);\n                const encodedMessageToSend = isMe',
+    replacement: 'const isMe = (0, WABinary_1.areJidsSameUser)(participant.jid, meId) || (Boolean(authState.creds.me.lid) && (0, WABinary_1.areJidsSameUser)(participant.jid, authState.creds.me.lid));\n                const encodedMessageToSend = isMe'
+  },
+  {
+    name: 'messages-send: retry stanza recipient accounts for LID',
+    target: 'else if ((0, WABinary_1.areJidsSameUser)(participant.jid, meId)) {\n                    stanza.attrs.to = participant.jid;\n                    stanza.attrs.recipient = destinationJid;\n                }',
+    replacement: 'else if ((0, WABinary_1.areJidsSameUser)(participant.jid, meId) || (Boolean(authState.creds.me.lid) && (0, WABinary_1.areJidsSameUser)(participant.jid, authState.creds.me.lid))) {\n                    stanza.attrs.to = participant.jid;\n                    stanza.attrs.recipient = destinationJid;\n                }'
+  }
+])
 
-if (content.includes(target1)) {
-  content = content.replace(target1, replace1)
-  modified = true
-  console.log('[patch-baileys] Patch 1 applied: defined meLidUser')
-}
-
-// Patch 2: Check isMe with both meUser and meLidUser
-const target2 = 'const isMe = user === meUser;\n                    const encodedLid ='
-const replace2 = 'const isMe = user === meUser || (Boolean(meLidUser) && user === meLidUser);\n                    const encodedLid ='
-
-if (content.includes(target2)) {
-  content = content.replace(target2, replace2)
-  modified = true
-  console.log('[patch-baileys] Patch 2 applied: isMe accounts for LID')
-}
-
-// Patch 3: Retry resend isMe check
-const target3 = 'const isMe = (0, WABinary_1.areJidsSameUser)(participant.jid, meId);\n                const encodedMessageToSend = isMe'
-const replace3 = 'const isMe = (0, WABinary_1.areJidsSameUser)(participant.jid, meId) || (Boolean(authState.creds.me.lid) && (0, WABinary_1.areJidsSameUser)(participant.jid, authState.creds.me.lid));\n                const encodedMessageToSend = isMe'
-
-if (content.includes(target3)) {
-  content = content.replace(target3, replace3)
-  modified = true
-  console.log('[patch-baileys] Patch 3 applied: retry resend isMe accounts for LID')
-}
-
-// Patch 4: Retry stanza recipient attribute check
-const target4 = 'else if ((0, WABinary_1.areJidsSameUser)(participant.jid, meId)) {\n                    stanza.attrs.to = participant.jid;\n                    stanza.attrs.recipient = destinationJid;\n                }'
-const replace4 = 'else if ((0, WABinary_1.areJidsSameUser)(participant.jid, meId) || (Boolean(authState.creds.me.lid) && (0, WABinary_1.areJidsSameUser)(participant.jid, authState.creds.me.lid))) {\n                    stanza.attrs.to = participant.jid;\n                    stanza.attrs.recipient = destinationJid;\n                }'
-
-if (content.includes(target4)) {
-  content = content.replace(target4, replace4)
-  modified = true
-  console.log('[patch-baileys] Patch 4 applied: retry stanza recipient accounts for LID')
-}
-
-if (modified) {
-  fs.writeFileSync(targetFile, content, 'utf8')
-  console.log('[patch-baileys] Successfully patched baileys messages-send.js')
-} else {
-  console.log('[patch-baileys] All patches already applied or patterns not matched.')
-}
+patchFile(messagesRecvFile, [
+  {
+    name: 'messages-recv: do not sendToAll when retry is from own device (isMeParticipant)',
+    target: 'const sendToAll = !((_a = (0, WABinary_1.jidDecode)(participant)) === null || _a === void 0 ? void 0 : _a.device);',
+    replacement: `const isMeParticipant = (0, WABinary_1.areJidsSameUser)(participant, authState.creds.me.id) || (Boolean(authState.creds.me.lid) && (0, WABinary_1.areJidsSameUser)(participant, authState.creds.me.lid));
+        const sendToAll = !isMeParticipant && !((_a = (0, WABinary_1.jidDecode)(participant)) === null || _a === void 0 ? void 0 : _a.device);`
+  }
+])
