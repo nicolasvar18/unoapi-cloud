@@ -17,6 +17,8 @@ import makeWASocket, {
   WAVersion,
   MiscMessageGenerationOptions,
   WAMessage,
+  jidDecode,
+  jidEncode,
 } from 'baileys'
 import MAIN_LOGGER from 'baileys/lib/Utils/logger'
 import { Config, defaultConfig } from './config'
@@ -30,7 +32,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import NodeCache from 'node-cache'
 import { useVoiceCallsBaileys } from 'voice-calls-baileys/lib/services/transport.model'
 import { emailNotifier } from './email_notifier'
-import { clearLatestQr, clearContactSession } from './redis'
+import { clearLatestQr, clearExactDeviceSession } from './redis'
 import {
   DEFAULT_BROWSER,
   CONNECTING_TIMEOUT_MS,
@@ -341,15 +343,6 @@ export const connect = async ({
     if (!key || !key.id) return undefined
     const remoteJid = key.remoteJid || (key as any).participant || ''
     logger.debug('load message for jid %s id %s', remoteJid, key.id)
-    if (remoteJid) {
-      clearContactSession(phone, remoteJid).catch(() => {})
-      store.evictSessionCache?.(remoteJid)
-    }
-    const participant = (key as any)?.participant
-    if (participant && participant !== remoteJid) {
-      clearContactSession(phone, participant).catch(() => {})
-      store.evictSessionCache?.(participant)
-    }
     const stored = await dataStore.loadMessage(remoteJid, key.id)
     if (!stored) {
       logger.debug('Message not found in dataStore for %s id %s', remoteJid, key.id)
@@ -660,48 +653,51 @@ export const connect = async ({
         }
       })
 
-      // Intercept retry receipt stanzas to immediately purge stale contact sessions
+      // Intercept retry receipt stanzas to immediately purge ONLY the failing device's session
       try {
         const wsAny = sock.ws as any
-        wsAny?.prependListener?.('CB:receipt', async (node: any) => {
+        const handleRetryNode = async (node: any) => {
           try {
             const attrs = node?.attrs
-            if (attrs?.type === 'retry') {
+            const isRetry = attrs?.type === 'retry' || (attrs?.class === 'receipt' && attrs?.type === 'retry')
+            if (isRetry) {
               const msgId = attrs.id || ''
-              const participant = attrs.participant || ''
-              const from = attrs.from || ''
-              const recipient = attrs.recipient || ''
+              const failedDeviceJid = attrs.participant || attrs.from || ''
               logger.warn(
-                'Retry receipt detected on %s for msg %s from %s (participant %s, recipient %s). Invalidating stale session...',
+                'Retry receipt detected on %s for msg %s from %s. Invalidating exact device session...',
                 phone,
                 msgId,
-                from,
-                participant,
-                recipient,
+                failedDeviceJid,
               )
 
-              const candidates = [from, participant, recipient]
-              if (msgId) {
-                const key = await dataStore.loadKey?.(msgId).catch(() => undefined)
-                if (key?.remoteJid) candidates.push(key.remoteJid)
-                const stored = await dataStore.loadMessage(key?.remoteJid || from || recipient, msgId).catch(() => undefined)
-                const storedRemote = stored?.key?.remoteJid
-                if (storedRemote) candidates.push(storedRemote)
+              const devicesToClear: string[] = []
+              if (failedDeviceJid) {
+                devicesToClear.push(failedDeviceJid)
+                // If it's a LID and sender_pn or participant_pn is provided, resolve the phone-number version of this exact device too
+                const { device } = jidDecode(failedDeviceJid) || {}
+                const pnJid = attrs.sender_pn || attrs.participant_pn
+                if (pnJid) {
+                  const pnUser = jidDecode(pnJid)?.user
+                  if (pnUser) {
+                    devicesToClear.push(jidEncode(pnUser, 's.whatsapp.net', device))
+                  }
+                }
               }
 
-              for (const c of candidates) {
-                if (c) {
-                  await clearContactSession(phone, c).catch(() => {})
-                  store.evictSessionCache?.(c)
-                }
+              for (const dev of devicesToClear) {
+                store.evictSessionCache?.(dev)
+                await clearExactDeviceSession(phone, dev).catch(() => {})
               }
             }
           } catch (err: any) {
-            logger.error('Error in CB:receipt retry listener for %s: %s', phone, err?.message)
+            logger.error('Error handling retry receipt for %s: %s', phone, err?.message)
           }
-        })
+        }
+
+        wsAny?.prependListener?.('CB:receipt', handleRetryNode)
+        wsAny?.prependListener?.('CB:ack', handleRetryNode)
       } catch (err: any) {
-        logger.error('Error attaching CB:receipt listener for %s: %s', phone, err?.message)
+        logger.error('Error attaching retry listeners for %s: %s', phone, err?.message)
       }
       logger.info('Connection type %s already creds %s', config.connectionType, sock?.authState?.creds?.registered)
       if (config.connectionType == 'pairing_code' && !sock?.authState?.creds?.registered) {

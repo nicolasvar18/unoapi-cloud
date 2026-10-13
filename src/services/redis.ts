@@ -1,7 +1,7 @@
 import { createClient } from '@redis/client'
 import { REDIS_URL, DATA_TTL, SESSION_TTL, DATA_URL_TTL } from '../defaults'
 import logger from './logger'
-import { GroupMetadata } from 'baileys'
+import { GroupMetadata, jidToSignalProtocolAddress } from 'baileys'
 import { Webhook, configs } from './config'
 
 export const BASE_KEY = 'unoapi-'
@@ -634,6 +634,23 @@ export const clearContactSession = async (phone: string, targetIdentifier?: stri
     }
   } catch (err: any) {
     logger.error('Error in clearContactSession for phone %s target %s: %s', phone, targetIdentifier, err?.message)
+  }
+}
+
+export const clearExactDeviceSession = async (phone: string, targetJid: string) => {
+  if (!phone || !targetJid) return
+  try {
+    let signalId = targetJid
+    if (targetJid.includes('@')) {
+      signalId = jidToSignalProtocolAddress(targetJid).toString()
+    } else if (!targetJid.includes('.')) {
+      signalId = `${targetJid}.0`
+    }
+    const key = `${BASE_KEY}auth:${phone}:session-${signalId}`
+    const deleted = await redisDel(key)
+    logger.info('clearExactDeviceSession: Deleted %d session key for bot %s target %s (key %s)', deleted, phone, targetJid, key)
+  } catch (err: any) {
+    logger.error('Error in clearExactDeviceSession for phone %s target %s: %s', phone, targetJid, err?.message)
   }
 }
 

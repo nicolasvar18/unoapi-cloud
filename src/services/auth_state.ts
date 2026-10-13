@@ -1,4 +1,4 @@
-import { initAuthCreds, proto, AuthenticationState, AuthenticationCreds, makeCacheableSignalKeyStore } from 'baileys'
+import { initAuthCreds, proto, AuthenticationState, AuthenticationCreds, makeCacheableSignalKeyStore, jidToSignalProtocolAddress } from 'baileys'
 import NodeCache from 'node-cache'
 import { session } from './session'
 import logger from './logger'
@@ -51,8 +51,8 @@ export const authState = async (session: session, phone: string) => {
 
   const evictSessionCache = (targetIdentifier?: string) => {
     try {
-      const cachedKeys = signalKeyCache.keys()
       if (!targetIdentifier || targetIdentifier === 'all') {
+        const cachedKeys = signalKeyCache.keys()
         for (const k of cachedKeys) {
           if (k.startsWith('session.')) {
             signalKeyCache.del(k)
@@ -61,12 +61,13 @@ export const authState = async (session: session, phone: string) => {
         return
       }
 
-      const clean = targetIdentifier.replace(/[^0-9]/g, '')
-      for (const k of cachedKeys) {
-        if (k.startsWith('session.') && (k.includes(targetIdentifier) || (clean && k.includes(clean)))) {
-          signalKeyCache.del(k)
-        }
+      let signalId = targetIdentifier
+      if (targetIdentifier.includes('@')) {
+        signalId = jidToSignalProtocolAddress(targetIdentifier).toString()
+      } else if (!targetIdentifier.includes('.')) {
+        signalId = `${targetIdentifier}.0`
       }
+      signalKeyCache.del(`session.${signalId}`)
     } catch (err: any) {
       logger.debug('Error evicting session cache for %s: %s', targetIdentifier, err?.message)
     }
