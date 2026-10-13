@@ -26,10 +26,22 @@ function patchFile(filePath, patches) {
   }
 }
 
-const messagesSendFile = path.resolve(__dirname, '../node_modules/baileys/lib/Socket/messages-send.js')
-const messagesRecvFile = path.resolve(__dirname, '../node_modules/baileys/lib/Socket/messages-recv.js')
-
-patchFile(messagesSendFile, [
+const sendPatches = [
+  // Revert primaryLid in initial send if previously applied
+  {
+    name: 'messages-send: revert manual primaryLid insertion in initial send',
+    target: `                if (meLidUser) {
+                    const primaryLid = (0, WABinary_1.jidEncode)(meLidUser, "lid", 0);
+                    if (!meIds.includes(primaryLid)) {
+                        meIds.push(primaryLid);
+                    }
+                    if (!allIds.includes(primaryLid)) {
+                        allIds.push(primaryLid);
+                    }
+                }
+                await assertSessions(allIds, false);`,
+    replacement: `                await assertSessions(allIds, false);`
+  },
   {
     name: 'messages-send: define meLidUser',
     target: 'const meUser = (_a = (0, WABinary_1.jidDecode)(meId)) === null || _a === void 0 ? void 0 : _a.user;\n                const encodedMeMsg =',
@@ -41,22 +53,6 @@ patchFile(messagesSendFile, [
     replacement: 'const isMe = user === meUser || (Boolean(meLidUser) && user === meLidUser);\n                    const encodedLid ='
   },
   {
-    name: 'messages-send: ensure primary phone LID is included in meIds',
-    target: 'allIds.push(encodedLid);\n                }\n                await assertSessions(allIds, false);',
-    replacement: `allIds.push(encodedLid);
-                }
-                if (meLidUser) {
-                    const primaryLid = (0, WABinary_1.jidEncode)(meLidUser, "lid", 0);
-                    if (!meIds.includes(primaryLid)) {
-                        meIds.push(primaryLid);
-                    }
-                    if (!allIds.includes(primaryLid)) {
-                        allIds.push(primaryLid);
-                    }
-                }
-                await assertSessions(allIds, false);`
-  },
-  {
     name: 'messages-send: retry resend isMe accounts for LID',
     target: 'const isMe = (0, WABinary_1.areJidsSameUser)(participant.jid, meId);\n                const encodedMessageToSend = isMe',
     replacement: 'const isMe = (0, WABinary_1.areJidsSameUser)(participant.jid, meId) || (Boolean(authState.creds.me.lid) && (0, WABinary_1.areJidsSameUser)(participant.jid, authState.creds.me.lid));\n                const encodedMessageToSend = isMe'
@@ -66,13 +62,25 @@ patchFile(messagesSendFile, [
     target: 'else if ((0, WABinary_1.areJidsSameUser)(participant.jid, meId)) {\n                    stanza.attrs.to = participant.jid;\n                    stanza.attrs.recipient = destinationJid;\n                }',
     replacement: 'else if ((0, WABinary_1.areJidsSameUser)(participant.jid, meId) || (Boolean(authState.creds.me.lid) && (0, WABinary_1.areJidsSameUser)(participant.jid, authState.creds.me.lid))) {\n                    stanza.attrs.to = participant.jid;\n                    stanza.attrs.recipient = destinationJid;\n                }'
   }
-])
+]
 
-patchFile(messagesRecvFile, [
+const recvPatches = [
   {
     name: 'messages-recv: do not sendToAll when retry is from own device (isMeParticipant)',
     target: 'const sendToAll = !((_a = (0, WABinary_1.jidDecode)(participant)) === null || _a === void 0 ? void 0 : _a.device);',
     replacement: `const isMeParticipant = (0, WABinary_1.areJidsSameUser)(participant, authState.creds.me.id) || (Boolean(authState.creds.me.lid) && (0, WABinary_1.areJidsSameUser)(participant, authState.creds.me.lid));
         const sendToAll = !isMeParticipant && !((_a = (0, WABinary_1.jidDecode)(participant)) === null || _a === void 0 ? void 0 : _a.device);`
   }
-])
+]
+
+const basePaths = [
+  path.resolve(__dirname, '../node_modules/baileys'),
+  path.resolve(__dirname, '../node_modules/voice-calls-baileys/node_modules/baileys')
+]
+
+for (const basePath of basePaths) {
+  const messagesSendFile = path.join(basePath, 'lib/Socket/messages-send.js')
+  const messagesRecvFile = path.join(basePath, 'lib/Socket/messages-recv.js')
+  patchFile(messagesSendFile, sendPatches)
+  patchFile(messagesRecvFile, recvPatches)
+}
