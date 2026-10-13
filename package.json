@@ -11,6 +11,7 @@
   "author": "Clairton Rodrigo Heinzen<clairton.rodrigo@gmail.com>",
   "license": "GPL-3.0",
   "scripts": {
+    "postinstall": "node ./scripts/patch-baileys.js",
     "lint": "eslint",
     "test": "node_modules/jest/bin/jest.js --coverage",
     "build": "./node_modules/typescript/bin/tsc -p .",

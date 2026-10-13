@@ -32,7 +32,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import NodeCache from 'node-cache'
 import { useVoiceCallsBaileys } from 'voice-calls-baileys/lib/services/transport.model'
 import { emailNotifier } from './email_notifier'
-import { clearLatestQr, clearExactDeviceSession } from './redis'
+import { clearLatestQr } from './redis'
 import {
   DEFAULT_BROWSER,
   CONNECTING_TIMEOUT_MS,
@@ -653,52 +653,7 @@ export const connect = async ({
         }
       })
 
-      // Intercept retry receipt stanzas to immediately purge ONLY the failing device's session
-      try {
-        const wsAny = sock.ws as any
-        const handleRetryNode = async (node: any) => {
-          try {
-            const attrs = node?.attrs
-            const isRetry = attrs?.type === 'retry' || (attrs?.class === 'receipt' && attrs?.type === 'retry')
-            if (isRetry) {
-              const msgId = attrs.id || ''
-              const failedDeviceJid = attrs.participant || attrs.from || ''
-              logger.warn(
-                'Retry receipt detected on %s for msg %s from %s. Invalidating exact device session...',
-                phone,
-                msgId,
-                failedDeviceJid,
-              )
 
-              const devicesToClear: string[] = []
-              if (failedDeviceJid) {
-                devicesToClear.push(failedDeviceJid)
-                // If it's a LID and sender_pn or participant_pn is provided, resolve the phone-number version of this exact device too
-                const { device } = jidDecode(failedDeviceJid) || {}
-                const pnJid = attrs.sender_pn || attrs.participant_pn
-                if (pnJid) {
-                  const pnUser = jidDecode(pnJid)?.user
-                  if (pnUser) {
-                    devicesToClear.push(jidEncode(pnUser, 's.whatsapp.net', device))
-                  }
-                }
-              }
-
-              for (const dev of devicesToClear) {
-                store.evictSessionCache?.(dev)
-                await clearExactDeviceSession(phone, dev).catch(() => {})
-              }
-            }
-          } catch (err: any) {
-            logger.error('Error handling retry receipt for %s: %s', phone, err?.message)
-          }
-        }
-
-        wsAny?.prependListener?.('CB:receipt', handleRetryNode)
-        wsAny?.prependListener?.('CB:ack', handleRetryNode)
-      } catch (err: any) {
-        logger.error('Error attaching retry listeners for %s: %s', phone, err?.message)
-      }
       logger.info('Connection type %s already creds %s', config.connectionType, sock?.authState?.creds?.registered)
       if (config.connectionType == 'pairing_code' && !sock?.authState?.creds?.registered) {
         logger.info(`Requesting pairing code ${phone}`)

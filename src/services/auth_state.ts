@@ -40,6 +40,15 @@ export const authState = async (session: session, phone: string) => {
         for (const id in data[category]) {
           const value = data[category][id]
           const key = getKey(category, id)
+          if (category === 'pre-key') {
+            // NEVER delete pre-keys immediately when Baileys marks them consumed!
+            // If deleted immediately, delayed incoming messages or companion device syncs fail with "Invalid PreKey ID".
+            // Retain pre-keys in Redis so retransmissions and companion devices can decrypt them cleanly.
+            if (value) {
+              tasks.push(writeData(key, value, -1))
+            }
+            continue
+          }
           // Default TTL of 24h for contact sessions so stale ratchets do not persist indefinitely
           const ttl = category === 'session' ? (SESSION_KEY_TTL > 0 ? SESSION_KEY_TTL : 86400) : -1
           tasks.push(value ? writeData(key, value, ttl) : removeData(key || credsKey))
