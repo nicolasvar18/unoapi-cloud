@@ -151,7 +151,7 @@ export const redisExpire = async (key: string, seconds: number) => {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const redisSet = async function (key: string, value: any) {
+export const redisSet = async function (key: string, value: any) {
   logger.trace(`Setting ${key} => ${(value + '').substring(0, 10)}...`)
   try {
     return client.set(key, value)

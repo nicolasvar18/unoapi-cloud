@@ -1,4 +1,4 @@
-import { redisLPush, redisLRange, redisLTrim, redisExpire, redisDel, redisKeys, redisGet, configKey } from './redis'
+import { redisLPush, redisLRange, redisLTrim, redisExpire, redisDel, redisKeys, redisGet, redisSet, configKey } from './redis'
 import logger from './logger'
 import { randomUUID } from 'crypto'
 
@@ -211,11 +211,11 @@ class ActivityLogger {
     if (this.seeded) return
     this.seeded = true
     try {
-      const globalKey = `unoapi-activity:global`
-      const existing = await redisLRange(globalKey, 0, 1)
-      if (existing && existing.length > 0) {
+      const alreadySeeded = await redisGet('unoapi-activity:seeded')
+      if (alreadySeeded) {
         return
       }
+      await redisSet('unoapi-activity:seeded', 'true')
 
       logger.info('Seeding initial historical activity logs...')
 
