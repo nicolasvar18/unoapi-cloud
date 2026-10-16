@@ -15,7 +15,7 @@ import {
 } from './redis'
 import logger from './logger'
 import { MAX_CONNECT_RETRY, MAX_CONNECT_TIME } from '../defaults'
-
+import { activityLogger } from './activity_logger'
 import { emailNotifier } from './email_notifier'
 
 const toReplaceConfig = configKey('')
@@ -51,6 +51,16 @@ export class SessionStoreRedis extends SessionStore {
   async setStatus(phone: string, status: sessionStatus) {
     const previousStatus = await this.getStatus(phone)
     logger.info(`Session status ${phone} change from ${previousStatus} to ${status}`)
+    if (previousStatus !== status) {
+      activityLogger.log({
+        phone,
+        level: status === 'online' ? 'info' : (['disconnected', 'offline'].includes(status) ? 'warn' : 'info'),
+        category: 'connection',
+        title: `Estado cambiado a ${status}`,
+        message: `El estado de la sesión cambió de "${previousStatus}" a "${status}".`,
+        details: { previousStatus, newStatus: status },
+      }).catch(() => {})
+    }
     if (['online', 'restart_required'].includes(status)) {
       await this.clearConnectCount(phone)
     }

@@ -9,6 +9,7 @@ import injectRouteDummy from './services/inject_route_dummy'
 import { indexController } from './controllers/index_controller'
 import { WebhookController } from './controllers/webhook_controller'
 import { WebhookFakeController } from './controllers/webhook_fake_controller'
+import { logsController } from './controllers/logs_controller'
 import { ContactsController } from './controllers/contacts_controller'
 import { TemplatesController } from './controllers/templates_controller'
 import { MessagesController } from './controllers/messages_controller'
@@ -79,6 +80,10 @@ export const router = (
   router.get('/smtp-config', middleware, indexController.getSmtpConfig.bind(indexController))
   router.post('/smtp-config', middleware, indexController.saveSmtpConfig.bind(indexController))
   router.post('/test-email', middleware, indexController.testEmail.bind(indexController))
+  router.get('/logs', middleware, logsController.getLogs.bind(logsController))
+  router.get('/logs/:phone', middleware, logsController.getLogs.bind(logsController))
+  router.delete('/logs', middleware, logsController.clearLogs.bind(logsController))
+  router.delete('/logs/:phone', middleware, logsController.clearLogs.bind(logsController))
   router.get('/connect/:phone', connectController.index.bind(connectController))
   router.get('/ping', indexController.ping)
   router.get('/:version/debug_token', indexController.debugToken)

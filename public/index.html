@@ -167,6 +167,12 @@
             </button>
             <div class="collapse navbar-collapse d-none" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
+                    <!-- Logs Direct Button -->
+                    <li class="nav-item me-2 d-none" id="navLogsItem">
+                        <button class="btn btn-sm btn-outline-dark mt-1 fw-bold" onclick="openLogsModal()">
+                            <i class="fas fa-clipboard-list text-primary me-1"></i> Logs del Sistema
+                        </button>
+                    </li>
                     <!-- Configurations Dropdown -->
                     <li class="nav-item dropdown d-none" id="navbarDropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="configDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -178,6 +184,9 @@
                             </li>
                             <li>
                                 <button class="dropdown-item" onclick="openSmtpModal()"><i class="fas fa-envelope text-warning"></i> Configurar Correo y Alertas</button>
+                            </li>
+                            <li>
+                                <button class="dropdown-item" onclick="openLogsModal()"><i class="fas fa-clipboard-list text-primary"></i> Visor de Logs y Desconexiones</button>
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
@@ -657,6 +666,125 @@
       </div>
     </div>
 
+    <!-- Modal Logs de Actividad -->
+    <div class="modal fade" id="logsModal" tabindex="-1" aria-labelledby="logsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+          <div class="modal-content">
+              <div class="modal-header bg-dark text-white">
+                  <div class="d-flex align-items-center gap-2">
+                      <i class="fas fa-file-alt fa-lg text-info"></i>
+                      <div>
+                          <h5 class="modal-title mb-0" id="logsModalLabel">Registro de Actividad y Diagnóstico</h5>
+                          <small class="text-white-50" id="logsModalSubtitle">Historial detallado de conexiones, desconexiones y eventos</small>
+                      </div>
+                  </div>
+                  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+              </div>
+              <div class="modal-body p-3">
+                  <!-- Guía rápida de desconexiones comunes -->
+                  <div class="alert alert-light border mb-3 py-2 px-3 small">
+                      <div class="d-flex align-items-center justify-content-between">
+                          <strong class="text-primary"><i class="fas fa-info-circle me-1"></i> Códigos de Desconexión de WhatsApp Frecuentes:</strong>
+                          <button class="btn btn-sm btn-link text-decoration-none p-0 text-muted" type="button" data-bs-toggle="collapse" data-bs-target="#disconnectGuideCollapse">
+                              Ver detalles <i class="fas fa-chevron-down ms-1"></i>
+                          </button>
+                      </div>
+                      <div class="collapse mt-2" id="disconnectGuideCollapse">
+                          <div class="row row-cols-1 row-cols-md-2 g-2 pt-1 border-top">
+                              <div><span class="badge bg-danger me-1">401</span> <strong>loggedOut:</strong> Sesión cerrada manualmente desde el celular ("Dispositivos vinculados -> Cerrar sesión") o rechazada por WhatsApp. Requiere volver a escanear QR.</div>
+                              <div><span class="badge bg-warning text-dark me-1">428</span> <strong>qrTimeout:</strong> El código QR expiró sin ser escaneado dentro del tiempo límite (180s).</div>
+                              <div><span class="badge bg-secondary me-1">440</span> <strong>connectionReplaced:</strong> Otra sesión inició con las mismas credenciales en otro servidor o pestaña.</div>
+                              <div><span class="badge bg-info text-dark me-1">515</span> <strong>restartRequired:</strong> WhatsApp solicitó reiniciar el socket. UnoAPI reconecta automáticamente.</div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- Filtros -->
+                  <div class="card mb-3 shadow-sm border-0 bg-light">
+                      <div class="card-body p-3">
+                          <div class="row g-2 align-items-end">
+                              <div class="col-md-3 col-sm-6">
+                                  <label for="logsFilterPhone" class="form-label small fw-bold mb-1">Número / Instancia</label>
+                                  <select id="logsFilterPhone" class="form-select form-select-sm">
+                                      <option value="">Todos los números</option>
+                                  </select>
+                              </div>
+                              <div class="col-md-2 col-sm-6">
+                                  <label for="logsFilterCategory" class="form-label small fw-bold mb-1">Categoría</label>
+                                  <select id="logsFilterCategory" class="form-select form-select-sm">
+                                      <option value="">Todas</option>
+                                      <option value="disconnection">Desconexión (disconnection)</option>
+                                      <option value="connection">Conexión (connection)</option>
+                                      <option value="qr">Código QR (qr)</option>
+                                      <option value="auth">Autenticación (auth)</option>
+                                      <option value="system">Sistema (system)</option>
+                                  </select>
+                              </div>
+                              <div class="col-md-2 col-sm-6">
+                                  <label for="logsFilterLevel" class="form-label small fw-bold mb-1">Nivel</label>
+                                  <select id="logsFilterLevel" class="form-select form-select-sm">
+                                      <option value="">Todos</option>
+                                      <option value="error">Error / Crítico</option>
+                                      <option value="warn">Advertencia (warn)</option>
+                                      <option value="info">Informativo (info)</option>
+                                  </select>
+                              </div>
+                              <div class="col-md-3 col-sm-6">
+                                  <label for="logsFilterSearch" class="form-label small fw-bold mb-1">Buscar texto</label>
+                                  <input type="text" id="logsFilterSearch" class="form-control form-select-sm" placeholder="Buscar en mensaje o código...">
+                              </div>
+                              <div class="col-md-2 col-sm-12 d-flex gap-1">
+                                  <button type="button" class="btn btn-sm btn-primary flex-grow-1" id="btnRefreshLogs" onclick="loadActivityLogs()">
+                                      <i class="fas fa-sync-alt" id="logsRefreshSpinner"></i> Filtrar
+                                  </button>
+                                  <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetLogFilters()" title="Limpiar filtros">
+                                      <i class="fas fa-undo"></i>
+                                  </button>
+                              </div>
+                          </div>
+                          <div class="d-flex align-items-center justify-content-between mt-2 pt-2 border-top small text-muted">
+                              <div>
+                                  <span id="logsCountBadge" class="badge bg-secondary">0 eventos encontrados</span>
+                                  <span id="logsFilterActiveBadge" class="ms-1 badge bg-info text-dark d-none">Filtro activo</span>
+                              </div>
+                              <div class="form-check form-switch mb-0">
+                                  <input class="form-check-input" type="checkbox" id="logsAutoRefreshToggle">
+                                  <label class="form-check-label" for="logsAutoRefreshToggle">Auto-refrescar cada 10s</label>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- Contenedor de la lista de logs -->
+                  <div id="logsLoadingSpinner" class="text-center py-5 d-none">
+                      <div class="spinner-border text-primary" role="status"></div>
+                      <p class="text-muted small mt-2">Cargando registros del servidor...</p>
+                  </div>
+                  <div id="logsEmptyState" class="text-center py-5 d-none text-muted">
+                      <i class="fas fa-clipboard-list fa-3x mb-2 text-secondary opacity-50"></i>
+                      <p class="mb-0">No se encontraron eventos con los filtros seleccionados.</p>
+                  </div>
+                  <div id="logsListContainer" class="list-group list-group-flush border rounded-3 overflow-auto" style="max-height: 480px;">
+                      <!-- Se insertan dinámicamente -->
+                  </div>
+              </div>
+              <div class="modal-footer justify-content-between bg-light">
+                  <div>
+                      <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearLogsPrompt()">
+                          <i class="fas fa-trash-alt"></i> Limpiar Registros
+                      </button>
+                  </div>
+                  <div class="d-flex gap-2">
+                      <button type="button" class="btn btn-sm btn-outline-secondary" onclick="exportLogsToJson()">
+                          <i class="fas fa-download"></i> Descargar JSON
+                      </button>
+                      <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                  </div>
+              </div>
+          </div>
+      </div>
+    </div>
+
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <!-- Bootstrap Bundle with Popper -->
@@ -1097,8 +1225,11 @@
                     });
             }
 
+            let allSessionsCache = [];
+
             // Populate Datatable with session numbers
             function populateTable(sessions) {
+                allSessionsCache = Array.isArray(sessions) ? sessions : [];
                 $('#errorMessage').addClass('d-none');
                 $('#sessionsTable').removeClass('d-none');
 
@@ -1128,6 +1259,9 @@
                         <button class="btn btn-sm btn-success connect-btn" data-bs-toggle="modal" data-bs-target="#connectModal" data-number="${session.display_phone_number}">
                             <i class="fas fa-link"></i> Conectar
                         </button>
+                        <button class="btn btn-sm btn-outline-dark logs-btn" data-number="${session.display_phone_number}" data-label="${session.label || ''}">
+                            <i class="fas fa-file-alt"></i> Logs
+                        </button>
                         <button class="btn btn-sm btn-danger delete-btn" data-number="${session.display_phone_number}">
                             <i class="fas fa-trash"></i> Eliminar
                         </button>
@@ -1137,6 +1271,13 @@
                     ]).draw(false);
                 });
             }
+
+            // Row logs button
+            $('#sessionsTable tbody').on('click', '.logs-btn', function() {
+                const number = $(this).data('number');
+                const label = $(this).data('label');
+                openLogsModal(number, label);
+            });
 
             // Deregister function
             $('#sessionsTable tbody').on('click', '.delete-btn', function() {
@@ -1596,6 +1737,304 @@
                 alert('Por favor, ingresa un número válido y el mensaje a enviar.');
             }
         }
+
+        // ==========================================
+        // SISTEMA DE LOGS Y DIAGNÓSTICO
+        // ==========================================
+        let logsAutoRefreshInterval = null;
+        let lastLoadedLogs = [];
+
+        function populateLogsPhoneSelect(selectedPhone) {
+            const select = $('#logsFilterPhone');
+            const currentValue = selectedPhone !== undefined ? selectedPhone : select.val();
+            select.empty();
+            select.append('<option value="">Todos los números</option>');
+            if (Array.isArray(allSessionsCache)) {
+                allSessionsCache.forEach(s => {
+                    const num = s.display_phone_number;
+                    const label = s.label ? ` (${s.label})` : '';
+                    const isSelected = String(num) === String(currentValue) ? 'selected' : '';
+                    select.append(`<option value="${num}" ${isSelected}>${num}${label}</option>`);
+                });
+            }
+        }
+
+        function openLogsModal(phone, label) {
+            populateLogsPhoneSelect(phone || '');
+            if (phone) {
+                $('#logsFilterPhone').val(phone);
+                const labelText = label ? ` - ${label}` : '';
+                $('#logsModalSubtitle').text(`Eventos de: ${phone}${labelText}`);
+            } else {
+                $('#logsFilterPhone').val('');
+                $('#logsModalSubtitle').text('Historial detallado de todas las sesiones');
+            }
+
+            const modalEl = document.getElementById('logsModal');
+            const logsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            logsModal.show();
+            loadActivityLogs();
+        }
+
+        function resetLogFilters() {
+            $('#logsFilterPhone').val('');
+            $('#logsFilterCategory').val('');
+            $('#logsFilterLevel').val('');
+            $('#logsFilterSearch').val('');
+            $('#logsModalSubtitle').text('Historial detallado de todas las sesiones');
+            loadActivityLogs();
+        }
+
+        function loadActivityLogs() {
+            const token = localStorage.getItem(tokenKey);
+            if (!token) return;
+
+            const phone = $('#logsFilterPhone').val();
+            const category = $('#logsFilterCategory').val();
+            const level = $('#logsFilterLevel').val();
+            const q = $('#logsFilterSearch').val();
+
+            // Indicar filtro activo
+            if (phone || category || level || q) {
+                $('#logsFilterActiveBadge').removeClass('d-none');
+            } else {
+                $('#logsFilterActiveBadge').addClass('d-none');
+            }
+
+            const queryParams = new URLSearchParams();
+            if (phone) queryParams.append('phone', phone);
+            if (category) queryParams.append('category', category);
+            if (level) queryParams.append('level', level);
+            if (q) queryParams.append('q', q);
+            queryParams.append('limit', '250');
+
+            $('#logsRefreshSpinner').addClass('fa-spin');
+            $('#logsLoadingSpinner').removeClass('d-none');
+            $('#logsEmptyState').addClass('d-none');
+
+            fetch(`${apiUrl}/logs?${queryParams.toString()}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                $('#logsRefreshSpinner').removeClass('fa-spin');
+                $('#logsLoadingSpinner').addClass('d-none');
+                if (data && data.success && Array.isArray(data.data)) {
+                    lastLoadedLogs = data.data;
+                    renderActivityLogs(data.data);
+                } else {
+                    renderActivityLogs([]);
+                }
+            })
+            .catch(err => {
+                $('#logsRefreshSpinner').removeClass('fa-spin');
+                $('#logsLoadingSpinner').addClass('d-none');
+                console.error("Error cargando logs:", err);
+                $('#logsListContainer').html(`
+                    <div class="alert alert-danger m-3">
+                        <i class="fas fa-exclamation-triangle me-2"></i> Error al consultar logs: ${err.message}
+                    </div>
+                `);
+            });
+        }
+
+        function renderActivityLogs(logs) {
+            const container = $('#logsListContainer');
+            container.empty();
+
+            $('#logsCountBadge').text(`${logs.length} eventos`);
+
+            if (!logs || logs.length === 0) {
+                $('#logsEmptyState').removeClass('d-none');
+                return;
+            }
+
+            $('#logsEmptyState').addClass('d-none');
+
+            logs.forEach((item, index) => {
+                // Formato de nivel
+                let levelBadge = '<span class="badge bg-secondary">info</span>';
+                let borderClass = 'border-start border-4 border-info';
+                if (item.level === 'error') {
+                    levelBadge = '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Error</span>';
+                    borderClass = 'border-start border-4 border-danger bg-danger-subtle bg-opacity-10';
+                } else if (item.level === 'warn') {
+                    levelBadge = '<span class="badge bg-warning text-dark"><i class="fas fa-exclamation-triangle me-1"></i>Warn</span>';
+                    borderClass = 'border-start border-4 border-warning bg-warning-subtle bg-opacity-10';
+                } else {
+                    levelBadge = '<span class="badge bg-info text-dark">Info</span>';
+                }
+
+                // Categoría
+                let catBadge = `<span class="badge bg-light text-dark border">${item.category || 'general'}</span>`;
+                if (item.category === 'disconnection' || item.category === 'disconnect') {
+                    catBadge = '<span class="badge bg-danger"><i class="fas fa-plug text-white me-1"></i>Desconexión</span>';
+                } else if (item.category === 'connection' || item.category === 'connect') {
+                    catBadge = '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Conexión</span>';
+                } else if (item.category === 'qr') {
+                    catBadge = '<span class="badge bg-primary"><i class="fas fa-qrcode me-1"></i>QR</span>';
+                } else if (item.category === 'auth') {
+                    catBadge = '<span class="badge bg-dark"><i class="fas fa-key me-1"></i>Autenticación</span>';
+                }
+
+                // Teléfono
+                const labelText = item.label ? ` (${escapeHtml(item.label)})` : '';
+                let phoneDisplay = item.phone ? `<span class="badge bg-dark font-monospace">${item.phone}${labelText}</span>` : '<span class="badge bg-secondary font-monospace">General</span>';
+
+                // Fecha
+                let dateStr = item.timestamp;
+                try {
+                    const d = new Date(item.timestamp);
+                    dateStr = d.toLocaleString('es-CO', { hour12: false });
+                } catch (e) {}
+
+                // Razón de desconexión destacada
+                let reasonHtml = '';
+                if (item.statusCode || item.category === 'disconnection' || item.category === 'disconnect') {
+                    reasonHtml = `
+                        <div class="mt-2 p-2 rounded bg-light border border-warning small">
+                            <strong class="text-danger"><i class="fas fa-microchip me-1"></i> Diagnóstico de Desconexión (Código WhatsApp: ${item.statusCode || 'N/A'}):</strong>
+                            <div class="text-dark fw-bold mt-1">${escapeHtml(item.title || '')}</div>
+                            <div class="text-secondary mt-1">${escapeHtml(item.message || '')}</div>
+                        </div>
+                    `;
+                }
+
+                // Datos adicionales
+                const logDetails = item.details || item.data;
+                let detailsHtml = '';
+                if (logDetails && Object.keys(logDetails).length > 0) {
+                    const collapseId = `logDetailsCollapse_${index}`;
+                    detailsHtml = `
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-link p-0 text-muted small text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+                                Ver detalles técnicos <i class="fas fa-caret-down"></i>
+                            </button>
+                            <div class="collapse mt-1" id="${collapseId}">
+                                <pre class="bg-dark text-white p-2 rounded small mb-0 font-monospace" style="font-size: 11px;">${escapeHtml(JSON.stringify(logDetails, null, 2))}</pre>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                const mainText = item.title && item.title !== item.message
+                    ? `<div class="fw-bold text-dark">${escapeHtml(item.title)}</div><div class="text-secondary small mt-1">${escapeHtml(item.message)}</div>`
+                    : `<div class="text-dark fw-medium">${escapeHtml(item.message)}</div>`;
+
+                const itemHtml = `
+                    <div class="list-group-item list-group-item-action ${borderClass} py-2 px-3">
+                        <div class="d-flex w-100 justify-content-between align-items-center mb-1 flex-wrap gap-1">
+                            <div class="d-flex align-items-center gap-2">
+                                ${levelBadge}
+                                ${catBadge}
+                                ${phoneDisplay}
+                            </div>
+                            <small class="text-muted"><i class="far fa-clock me-1"></i>${dateStr}</small>
+                        </div>
+                        <div class="my-1">${mainText}</div>
+                        ${(item.category === 'disconnection' || item.category === 'disconnect' || item.statusCode) ? reasonHtml : ''}
+                        ${detailsHtml}
+                    </div>
+                `;
+                container.append(itemHtml);
+            });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function exportLogsToJson() {
+            if (!lastLoadedLogs || lastLoadedLogs.length === 0) {
+                alert('No hay registros cargados para exportar.');
+                return;
+            }
+            const phone = $('#logsFilterPhone').val() || 'todos';
+            const jsonStr = JSON.stringify(lastLoadedLogs, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `unoapi-logs-${phone}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function clearLogsPrompt() {
+            const phone = $('#logsFilterPhone').val();
+            const targetText = phone ? `los logs del número ${phone}` : 'TODOS los logs del sistema';
+            if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente ${targetText}?`)) {
+                return;
+            }
+
+            const token = localStorage.getItem(tokenKey);
+            if (!token) return;
+
+            const url = phone ? `${apiUrl}/logs/${phone}` : `${apiUrl}/logs`;
+            fetch(url, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                alert('Los registros se eliminaron exitosamente.');
+                loadActivityLogs();
+            })
+            .catch(err => {
+                alert('Error al eliminar logs: ' + err.message);
+            });
+        }
+
+        // Auto-refresh control
+        $(document).on('change', '#logsAutoRefreshToggle', function() {
+            if ($(this).is(':checked')) {
+                if (logsAutoRefreshInterval) clearInterval(logsAutoRefreshInterval);
+                logsAutoRefreshInterval = setInterval(() => {
+                    const modalEl = document.getElementById('logsModal');
+                    if (modalEl && modalEl.classList.contains('show')) {
+                        loadActivityLogs();
+                    }
+                }, 10000);
+            } else {
+                if (logsAutoRefreshInterval) clearInterval(logsAutoRefreshInterval);
+                logsAutoRefreshInterval = null;
+            }
+        });
+
+        // Limpiar intervalo cuando se cierre el modal
+        $('#logsModal').on('hidden.bs.modal', function () {
+            if (logsAutoRefreshInterval) {
+                clearInterval(logsAutoRefreshInterval);
+                logsAutoRefreshInterval = null;
+            }
+            $('#logsAutoRefreshToggle').prop('checked', false);
+        });
+
+        // Filtrar en tiempo real al presionar Enter en el buscador
+        $('#logsFilterSearch').on('keypress', function(e) {
+            if (e.which === 13) {
+                loadActivityLogs();
+            }
+        });
+
+        // Cambio de selectores filtra automáticamente
+        $('#logsFilterPhone, #logsFilterCategory, #logsFilterLevel').on('change', function() {
+            loadActivityLogs();
+        });
     </script>
 </body>
 </html>

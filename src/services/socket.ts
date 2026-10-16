@@ -33,6 +33,7 @@ import NodeCache from 'node-cache'
 import { useVoiceCallsBaileys } from 'voice-calls-baileys/lib/services/transport.model'
 import { emailNotifier } from './email_notifier'
 import { clearLatestQr } from './redis'
+import { activityLogger, getDisconnectReasonDescription } from './activity_logger'
 import {
   DEFAULT_BROWSER,
   CONNECTING_TIMEOUT_MS,
@@ -206,6 +207,14 @@ export const connect = async ({
         return logout()
       } else {
         logger.debug('QRCode generate... %s of %s', status.attempt, attempts)
+        activityLogger.log({
+          phone,
+          level: 'info',
+          category: 'qr',
+          title: `Código QR generado (Intento ${status.attempt} de ${attempts})`,
+          message: 'Nuevo código QR generado. Escanéalo en WhatsApp > Dispositivos vinculados > Vincular un dispositivo.',
+          details: { attempt: status.attempt, maxAttempts: attempts },
+        }).catch(() => {})
         return onQrCode(event.qr, status.attempt++, attempts)
       }
     }
@@ -265,6 +274,13 @@ export const connect = async ({
     const message = t('connecting')
     await onNotification(message, false)
     logger.info(message)
+    activityLogger.log({
+      phone,
+      level: 'info',
+      category: 'connection',
+      title: 'Iniciando conexión',
+      message: 'Conectando WebSocket con los servidores de WhatsApp...',
+    }).catch(() => {})
     return verifyConnectingTimeout()
   }
 
@@ -273,6 +289,13 @@ export const connect = async ({
     await sessionStore.setStatus(phone, 'online')
     await clearLatestQr(phone).catch(() => {})
     logger.info(`${phone} connected`)
+    activityLogger.log({
+      phone,
+      level: 'info',
+      category: 'connection',
+      title: 'Sesión Conectada (En Línea)',
+      message: `Dispositivo autenticado exitosamente en WhatsApp (${phone}).`,
+    }).catch(() => {})
     const { version } = await fetchLatestBaileysVersion()
 
     const message = t('connected', phone, sock?.user?.id!, whatsappVersion ? whatsappVersion.join('.') : 'auto', version.join('.'), new Date().toUTCString())
@@ -308,6 +331,22 @@ export const connect = async ({
     const { lastDisconnect } = payload
     const statusCode = lastDisconnect?.error?.output?.statusCode
     logger.info(`${phone} disconnected with status: ${statusCode}`)
+    const reasonInfo = getDisconnectReasonDescription(statusCode, lastDisconnect?.error)
+    activityLogger.log({
+      phone,
+      level: reasonInfo.level,
+      category: 'disconnection',
+      title: reasonInfo.title,
+      message: reasonInfo.explanation,
+      statusCode,
+      details: {
+        statusCode,
+        error: lastDisconnect?.error?.message,
+        payload: lastDisconnect?.error?.output?.payload,
+        date: lastDisconnect?.date || new Date().toISOString(),
+        attempt: status.attempt,
+      },
+    }).catch(() => {})
     if ([DisconnectReason.loggedOut, 403].includes(statusCode)) {
       status.attempt = 1
       if (!(await sessionStore.isStatusConnecting(phone))) {
@@ -363,6 +402,14 @@ export const connect = async ({
       const message = t('attempts_exceeded', attempts)
       await onNotification(message, true)
       status.attempt = 1
+      activityLogger.log({
+        phone,
+        level: 'error',
+        category: 'disconnection',
+        title: 'Intentos de reconexión agotados',
+        message: `Se superó el límite de ${attempts} intentos de reconexión sin éxito.`,
+        details: { maxAttempts: attempts },
+      }).catch(() => {})
       emailNotifier.notifyDisconnection(phone, `Intentos de reconexión agotados (${attempts})`).catch(() => {})
       return close()
     } else {
@@ -413,6 +460,13 @@ export const connect = async ({
 
   const logout = async () => {
     logger.info(`${phone} logout`)
+    activityLogger.log({
+      phone,
+      level: 'warn',
+      category: 'auth',
+      title: 'Sesión Cerrada y Credenciales Eliminadas',
+      message: 'Se procedió al cierre de sesión y remoción de credenciales locales en Redis.',
+    }).catch(() => {})
     if (presenceInterval) {
       clearInterval(presenceInterval)
       presenceInterval = null

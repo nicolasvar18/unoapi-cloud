@@ -98,6 +98,58 @@ export const redisKeys = async (pattern: string) => {
   }
 }
 
+export const redisLPush = async (key: string, ...values: string[]) => {
+  try {
+    return client.lPush(key, values)
+  } catch (error) {
+    if (!client) {
+      await getRedis()
+      return client.lPush(key, values)
+    } else {
+      throw error
+    }
+  }
+}
+
+export const redisLRange = async (key: string, start: number, stop: number): Promise<string[]> => {
+  try {
+    return client.lRange(key, start, stop)
+  } catch (error) {
+    if (!client) {
+      await getRedis()
+      return client.lRange(key, start, stop)
+    } else {
+      throw error
+    }
+  }
+}
+
+export const redisLTrim = async (key: string, start: number, stop: number) => {
+  try {
+    return client.lTrim(key, start, stop)
+  } catch (error) {
+    if (!client) {
+      await getRedis()
+      return client.lTrim(key, start, stop)
+    } else {
+      throw error
+    }
+  }
+}
+
+export const redisExpire = async (key: string, seconds: number) => {
+  try {
+    return client.expire(key, seconds)
+  } catch (error) {
+    if (!client) {
+      await getRedis()
+      return client.expire(key, seconds)
+    } else {
+      throw error
+    }
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const redisSet = async function (key: string, value: any) {
   logger.trace(`Setting ${key} => ${(value + '').substring(0, 10)}...`)
