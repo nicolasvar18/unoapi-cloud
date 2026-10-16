@@ -800,6 +800,8 @@
         let currentQrTimeOut = ''
         let lastTimeout = undefined
         let qrPollInterval = null;
+        window.allSessionsCache = [];
+        var allSessionsCache = window.allSessionsCache;
         
         const onBroadcast = function(data) {
           if (data.phone == currentPhoneNumber) {
@@ -1225,11 +1227,10 @@
                     });
             }
 
-            let allSessionsCache = [];
-
             // Populate Datatable with session numbers
             function populateTable(sessions) {
-                allSessionsCache = Array.isArray(sessions) ? sessions : [];
+                window.allSessionsCache = Array.isArray(sessions) ? sessions : [];
+                allSessionsCache = window.allSessionsCache;
                 $('#errorMessage').addClass('d-none');
                 $('#sessionsTable').removeClass('d-none');
 
@@ -1749,17 +1750,35 @@
             const currentValue = selectedPhone !== undefined ? selectedPhone : select.val();
             select.empty();
             select.append('<option value="">Todos los números</option>');
-            if (Array.isArray(allSessionsCache)) {
-                allSessionsCache.forEach(s => {
-                    const num = s.display_phone_number;
-                    const label = s.label ? ` (${s.label})` : '';
-                    const isSelected = String(num) === String(currentValue) ? 'selected' : '';
-                    select.append(`<option value="${num}" ${isSelected}>${num}${label}</option>`);
-                });
-            }
+            const list = (window.allSessionsCache && Array.isArray(window.allSessionsCache) && window.allSessionsCache.length > 0)
+                ? window.allSessionsCache
+                : (typeof allSessionsCache !== 'undefined' && Array.isArray(allSessionsCache) ? allSessionsCache : []);
+
+            list.forEach(s => {
+                const num = s.display_phone_number;
+                const label = s.label ? ` (${s.label})` : '';
+                const isSelected = String(num) === String(currentValue) ? 'selected' : '';
+                select.append(`<option value="${num}" ${isSelected}>${num}${label}</option>`);
+            });
         }
 
         function openLogsModal(phone, label) {
+            const token = localStorage.getItem(tokenKey);
+            if ((!window.allSessionsCache || window.allSessionsCache.length === 0) && token) {
+                fetch(`${apiUrl}/v15.0/session`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
+                .then(res => res.json())
+                .then(resp => {
+                    if (resp && resp.data) {
+                        window.allSessionsCache = resp.data;
+                        allSessionsCache = resp.data;
+                        populateLogsPhoneSelect(phone || '');
+                    }
+                })
+                .catch(() => {});
+            }
+
             populateLogsPhoneSelect(phone || '');
             if (phone) {
                 $('#logsFilterPhone').val(phone);
